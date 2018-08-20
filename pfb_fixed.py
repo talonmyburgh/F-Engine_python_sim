@@ -190,9 +190,9 @@ class FixPFB(object):
                     
                     for i in range(0,stages):                           #for each stage, populate all firs, and run FFT once
                         if(i ==0):
-                            X[:,i] = iterffft(self._FIR(DATA[i*self.N:i*self.N+self.N]),self.bits,self.fraction,self.shiftreg)
+                            X[:,i] = iterffft_natural_DIT(self._FIR(DATA[i*self.N:i*self.N+self.N]),self.bits,self.fraction,self.shiftreg)
                         else:
-                            X[:,i] = iterffft(self._FIR(DATA[i*self.N-1:i*self.N+self.N-1]),self.bits,self.fraction,self.shiftreg)
+                            X[:,i] = iterffft_natural_DIT(self._FIR(DATA[i*self.N-1:i*self.N+self.N-1]),self.bits,self.fraction,self.shiftreg)
                     if(self.dual): 
                         self._split(X)
                         self.H_k = self._pow(self.H_k)

@@ -8,7 +8,7 @@ import numpy as np
 from pfb_fixed import bitrevfixarray, make_fix_twiddle
 from pfb_floating import bitrevarray, make_twiddle
 import matplotlib.pyplot as plt
-from fixpoint import fixpoint,cfixpoint
+from fixpoint import cfixpoint
 from collections import deque
 
 
@@ -16,7 +16,7 @@ N = 512
 n = np.arange(N)
 bits =20
 fraction = 20
-method = "truncate"
+method = "round"
 
 ####SIGNALS######
 sig1 = np.cos(2*np.pi*n/N)/2.5
@@ -97,18 +97,25 @@ def iterffft_test(d,twid,shiftreg,bits,fraction,st,offset=0.0,method="round"):  
 
 st=1
 while st <N:
-    shiftreg = deque([0,0,0,0,0,0,0,0,0])
+    shiftreg = deque([0,0,1,1,1,1,1,1,1])
     #floatingsave
-    fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
+    fig, ax = plt.subplots(3, 2, sharex=True, sharey=False)
     valsfl = iterfft_test(sig1,twidsfloat,st)
-    #if(st == int(np.log2(N))-1): valsfl = bitrevarray(valsfl,N)
-    ax[0].plot(np.abs(valsfl),'g')
+    ax[0,0].plot(np.real(valsfl),'g')
     
     #fixedsave
     valsfx = iterffft_test(fsig1,twidsfix,shiftreg,bits=bits,fraction = fraction,method = method,st=st).to_complex()
-    #if(st == int(np.log2(N))-1): valsfx = bitrevfixarray(valsfx,N)
-    ax[1].plot(np.abs(valsfx),'r')
-    ax[0].set_title('iterfft and iterffft of cosine, stage: '+str(st))
+    ax[0,1].plot(np.real(valsfx),'r')
+    ax[0,0].set_title('REAL - iterfft and iterffft of cosine, stage: '+str(st))
+    
+    ax[1,0].plot(np.imag(valsfl),'g')
+    ax[1,1].plot(np.imag(valsfx),'r')
+    ax[1,0].set_title('IMAG - iterfft and iterffft of cosine, stage: '+str(st))
+    
+    ax[2,0].plot(np.abs(valsfl),'g')
+    ax[2,1].plot(np.abs(valsfx),'r')
+    ax[2,0].set_title('ABS - iterfft and iterffft of cosine, stage: '+str(st))
+    
     fig.savefig('../snapsf_engine/cos/st'+str(st)+'_cos.png')
     fig.clear()
     st=st*2

@@ -78,7 +78,7 @@ class fixpoint(object):
                 self.bits, self.fraction, np.shape(self.data))
                
     def __getitem__(self,key):
-        newfpt = fixpoint(self.bits,self.fraction,self.unsigned)
+        newfpt = fixpoint(self.bits,self.fraction,unsigned = self.unsigned)
         tmparray = self.data.copy()
         newfpt.data = tmparray[key]
         return newfpt
@@ -157,7 +157,7 @@ class fixpoint(object):
     @staticmethod
     def concatenate(other,another):
         tmparray = np.concatenate([other.data,another.data])
-        tmpfpt = fixpoint(other.bits,other.fraction,other.unsigned)
+        tmpfpt = fixpoint(other.bits,other.fraction,unsigned = other.unsigned)
         tmpfpt.data = tmparray
         return tmpfpt
     
@@ -176,11 +176,9 @@ class fixpoint(object):
     
     def copy(self):  #method for making a copy of fixpoint type (else get referencing issues)
         tmpfxpt=fixpoint(self.bits,self.fraction,unsigned=self.unsigned,offset=self.offset,method = self.method)
-        tmparray = self.data
-        tmpfxpt.data = tmparray.copy()
+        tmpfxpt.data = self.data.copy()
         return tmpfxpt
-        
-
+    
     __str__ = __repr__
 
 class cfixpoint(object):
@@ -292,7 +290,7 @@ class cfixpoint(object):
         return result
     @staticmethod
     def concatenate(other,another):
-        tmpcfpt = cfixpoint(other.bits,other.fraction,other.unsigned)
+        tmpcfpt = cfixpoint(other.bits,other.fraction,unsigned = other.unsigned)
         tmpcfpt.real =fixpoint.concatenate(other.real,another.real)
         tmpcfpt.imag =fixpoint.concatenate(other.imag,another.imag)
         return tmpcfpt
