@@ -12,10 +12,10 @@ from fixpoint import cfixpoint
 from collections import deque
 
 
-N = 512
+N = 256
 n = np.arange(N)
-bits =20
-fraction = 20
+bits =18
+fraction = 18
 method = "round"
 
 ####SIGNALS######
@@ -34,7 +34,7 @@ fsig3.from_complex(sig3)
 ####PARAMS####
 twidsfloat = make_twiddle(N)
 twidsfloat = bitrevarray(twidsfloat,twidsfloat.size)
-twidsfix = make_fix_twiddle(N,bits,fraction,method = method)
+twidsfix = make_fix_twiddle(N,bits,fraction-1,method = method)
 twidsfix = bitrevfixarray(twidsfix,twidsfix.data.size)
 
 
@@ -75,29 +75,33 @@ def iterffft_test(d,twid,shiftreg,bits,fraction,st,offset=0.0,method="round"):  
     pairs_in_group = N//2                                                        #how many butterfly pairs per group - starts at 1/2*full data length obviously
     num_of_groups = 1                                                            #number of groups - how many subarrays are there?
     distance = N//2                                                              #how far between each fft arm?
-    while num_of_groups < st:                                                     #basically iterates through stages
+    while num_of_groups < st:                                                    #basically iterates through stages
         for k in range(num_of_groups):                                           #iterate through each subarray
             jfirst = 2*k*pairs_in_group                                          #index to beginning of a group
             jlast = jfirst + pairs_in_group - 1                                  #first index plus offset - used to index whole group
             W=twid[k]
             for j in range(jfirst,jlast + 1):
-                tmp = (W * data[j+distance]) >> bits
-                tmp.bits -= bits + 1
-                tmp.fraction -= bits
+                tmp = (W * data[j+distance]) >> bits + 1                         #slice off lower bit growth from multiply
+                tmp.bits -= (bits + 1)                                           #bits will = 2*bits+1 - hence - (bits+1)
+                tmp.fraction -= (bits-1)                                         #fraction will = 2*(frac1+frac2) - hence - (bits-1)
                 tmp.normalise()
                 data[j+distance] = data[j]-tmp
                 data[j] = data[j]+tmp
-        if shiftreg.pop():                                                   #implement FFT shift and then normalise to correct at end of stage
+        #Here data will have bits+1 as a result of the additions.
+        #whether we right shift or not, the meta data must be updated to -1 from
+        #bits.
+        if shiftreg.pop():                                                       #implement FFT shift and then normalise to correct at end of stage
             data>>1
+        
         pairs_in_group //=2
         num_of_groups *=2
         distance //=2
-    #A=bitrevfixarray(data,N)                                                        #post bit-reordering
+    #A=bitrevfixarray(data,N)                                                    #post bit-reordering
     return data
 
 st=1
-while st <N:
-    shiftreg = deque([0,0,1,1,1,1,1,1,1])
+while st <= N:
+    shiftreg = deque([1,1,1,1,1,1,1,1])
     #floatingsave
     fig, ax = plt.subplots(3, 2, sharex=True, sharey=False)
     valsfl = iterfft_test(sig1,twidsfloat,st)

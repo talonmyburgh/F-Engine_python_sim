@@ -38,7 +38,7 @@ def make_fix_twiddle(N,bits,fraction,offset=0.0, method="round"):
     tmp = cfixpoint(bits,fraction,offset=offset, method = method)
     twids.from_complex(np.zeros(N//2,dtype=np.complex))
     for i in range(0,N//2):
-        tmp.from_complex(np.exp(-2*i*np.pi*1j/N)/2.001)
+        tmp.from_complex(np.exp(-2*i*np.pi*1j/N)-0.00000001)
         twids[i] = tmp
     return twids
 
