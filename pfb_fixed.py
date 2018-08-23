@@ -38,7 +38,7 @@ def make_fix_twiddle(N,bits,fraction,offset=0.0, method="round"):
     tmp = cfixpoint(bits,fraction,offset=offset, method = method)
     twids.from_complex(np.zeros(N//2,dtype=np.complex))
     for i in range(0,N//2):
-        tmp.from_complex(np.exp(-2*i*np.pi*1j/N)-0.00000001)
+        tmp.from_complex(np.exp(-2*i*np.pi*1j/N))
         twids[i] = tmp
     return twids
 
@@ -64,14 +64,17 @@ def iterffft_natural_DIT(a,twid,shiftreg,bits,fraction,offset=0.0,method="round"
             jlast = jfirst + pairs_in_group - 1                                  #first index plus offset - used to index whole group
             W=twid[k]
             for j in range(jfirst,jlast+1):
-                tmp = (W * data[j+distance]) >> bits
-                tmp.bits -= bits + 1
-                tmp.fraction -= bits
+                tmp = (W * data[j+distance]) >> bits - 1                         #slice off lower bit growth from multiply
+                tmp.bits =bits                                          #bits will = 2*bits+1 - hence - (bits+1)
+                tmp.fraction=fraction                                        #fraction will = 2*(frac1+frac2) - hence - (bits-1)
                 tmp.normalise()
+                
                 data[j+distance] = data[j]-tmp
                 data[j] = data[j]+tmp
-        if shiftreg.pop():                                                   #implement FFT shift and then normalise to correct at end of stage
+        if shiftreg.pop():                                                       #implement FFT shift and then normalise to correct at end of stage
             data>>1
+        data.normalise()
+        
         pairs_in_group //=2
         num_of_groups *=2
         distance //=2

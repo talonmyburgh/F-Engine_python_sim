@@ -78,9 +78,8 @@ class fixpoint(object):
                 self.bits, self.fraction, np.shape(self.data))
                
     def __getitem__(self,key):
-        newfpt = fixpoint(self.bits,self.fraction,unsigned = self.unsigned)
-        tmparray = self.data.copy()
-        newfpt.data = tmparray[key]
+        newfpt = self.copy()
+        newfpt.data = self.data.copy()[key]
         return newfpt
     
     def __setitem__(self,key,val):
@@ -123,11 +122,8 @@ class fixpoint(object):
         return result
 
     def __add__(self, y):
-        #if(self.scale>y.scale): #re-adjust scales to match if not equal - try to not lose precision
-            #y = y.quantise(y.bits,int(np.log2(self.scale)),y.min,y.max,y.unsigned)
-            
-        #elif(self.scale<y.scale): #re-adjust scales to match if not equal - try to not lose precision
-            #self = self.quantise(self.bits,int(np.log2(y.scale)),self.min,self.max,self.unsigned)
+        if(self.scale>y.scale or self.scale<y.scale):
+            raise ValueError("Addition performed between two numbers of differing scales!")
             
         res = self.data + y.data
         #adds together, and accounts for carry bit
@@ -139,11 +135,8 @@ class fixpoint(object):
         return result
 
     def __sub__(self, y):
-        #if(self.scale>y.scale): #re-adjust scales to match if not equal - try to not lose precision
-            #y = y.quantise(y.bits,int(np.log2(self.scale)),y.min,y.max,y.unsigned)
-            
-        #elif(self.scale<y.scale): #re-adjust scales to match if not equal - try to not lose precision
-            #self = self.quantise(self.bits,int(np.log2(y.scale)),self.min,self.max,self.unsigned)
+        if(self.scale>y.scale or self.scale<y.scale):
+            raise ValueError("Subtraction performed between two numbers of differing scales!")
             
         res = self.data - y.data
         #subtracts together, and accounts for carry bit
