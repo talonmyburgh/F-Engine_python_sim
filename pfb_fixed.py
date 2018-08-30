@@ -43,9 +43,9 @@ def make_fix_twiddle(N,bits,fraction,offset=0.0, method="round"):
     return twids
 
 
-def iterffft_natural_DIT(a,twid,shiftreg,bits,fraction,offset=0.0,method="round"):  #parse in data,tiddle factors (must be in bit reversed order for natural order in),
+def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,offset=0.0,method="round"):  #parse in data,tiddle factors (must be in bit reversed order for natural order in),
                                                                                  #how many bits fixpoint numbers are, fraction bits they are, offset, and rounding scheme.
-    data=a.copy()
+    data=DATA.copy()
     N = data.data.size                                                           #how long is data stream
     stages = np.log2(N)
     if(type(shiftreg) == deque and len(shiftreg)==stages):
@@ -90,11 +90,11 @@ import matplotlib.pyplot as plt
 class FixPFB(object):
         """This function takes point size, how many taps, what percentage of total data to average over,
         what windowing function, whether you're running dual polarisations, and data type"""
-        def __init__(self, N, taps, bits, fraction,shiftreg, unsigned = False, offset = 0.5,method = "round",  avgperc = 1,w = 'hanning',dual = False):
+        def __init__(self, N, taps, bits, fraction,shiftreg, unsigned = False, offset = 0.0,method = "round",  avgperc = 1,w = 'hanning',dual = False):
             self.N = N                   #how many points
             self.avg = avgperc           #what averaging
             self.dual = dual             #whether you're performing dual polarisations or not
-            
+            self.taps = taps
             self.bits = bits
             self.fraction = fraction
             self.shiftreg = shiftreg
@@ -113,19 +113,27 @@ class FixPFB(object):
                 }
             self.window = cfixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
             self.window.from_complex(WinDic[w](taps))     
-            self.X_k = cfixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)                 #our output
+            self.X_k = None                 #our output
             
             if(dual):                       #if dual, our two outputs
                 self.H_k = cfixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
                 self.G_k = cfixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
                 
-            self.twids = make_fix_twiddle(self.N,self.bits,self.fraction,self.offset,self.method)
-            self.twids = bitrevfixarray(self.twids,self.N)
+            self.twids = make_fix_twiddle(self.N,self.bits,self.fraction-1,self.offset,self.method)
+            self.twids = bitrevfixarray(self.twids,self.twids.data.size)
             
         """Takes data segment (N long) and appends each value to each fir.
         Returns data segment (N long) that is the sum of fircontents*window"""
         def _FIR(self,x):
-            X =  (self.reg*self.window).sum(axis=1).quantise(self.bits,self.fraction,unsigned=self.unsigned)
+            X =  (self.reg*self.window).sum(axis=1)                             #Should be a 1D array with size = N
+            step = X.bits - self.bits
+            print(step)
+            print(X)
+            print(X.data[:10])
+            X >> step                                                   #right shift - accounting for multiple addition bit growth
+            X.bits = self.bits
+            X.fraction = self.fraction
+            X.normalise()
             tmp = np.column_stack((x.data,self.reg.data))[:,:-1]
             self.reg.real.data = np.real(tmp)
             self.reg.imag.data = np.imag(tmp)     #push and pop from FIR register array
@@ -193,9 +201,9 @@ class FixPFB(object):
                     
                     for i in range(0,stages):                           #for each stage, populate all firs, and run FFT once
                         if(i ==0):
-                            X[:,i] = iterffft_natural_DIT(self._FIR(DATA[i*self.N:i*self.N+self.N]),self.bits,self.fraction,self.shiftreg)
+                            X[:,i] = iterffft_natural_DIT(self._FIR(DATA[i*self.N:i*self.N+self.N]),self.twids,self.shiftreg,self.bits,self.fraction)
                         else:
-                            X[:,i] = iterffft_natural_DIT(self._FIR(DATA[i*self.N-1:i*self.N+self.N-1]),self.bits,self.fraction,self.shiftreg)
+                            X[:,i] = iterffft_natural_DIT(self._FIR(DATA[i*self.N-1:i*self.N+self.N-1]),self.twids,self.shiftreg,self.bits,self.fraction)
                     if(self.dual): 
                         self._split(X)
                         self.H_k = self._pow(self.H_k)

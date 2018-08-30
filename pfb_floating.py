@@ -88,7 +88,7 @@ def iterfft_natural_in_DIT(s,w):
 
 import matplotlib.pyplot as plt
 
-class PFB(object):
+class FloatPFB(object):
         """This function takes point size, how many taps, what percentage of total data to average over,
         what windowing function, whether you're running dual polarisations, and data type"""
         def __init__(self, N, taps, avg = 1, datasrc = None, w = 'hanning',dual = False):
@@ -116,7 +116,8 @@ class PFB(object):
                 self.H_k = None
                 self.G_k = None
                 
-            self.twids = maketwiddle(self.N)
+            self.twids = make_twiddle(self.N)
+            self.twids = bitrevarray(self.twids, len(self.twids))
                 
         """Takes data segment (N long) and appends each value to each fir.
         Returns data segment (N long) that is the sum of fircontents*window"""
@@ -192,9 +193,9 @@ class PFB(object):
             
             for i in range(0,stages):                           #for each stage, populate all firs, and run FFT once
                 if(i ==0):
-                    X[:,i] = np.fft.fft(self._FIR(self.inputdata[i*self.N:i*self.N+self.N]))
+                    X[:,i] = iterfft_natural_in_DIT(self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),self.twids)
                 else:
-                    X[:,i] = np.fft.fft(self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]))
+                    X[:,i] = iterfft_natural_in_DIT(self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]),self.twids)
             
             if(type(self.inputdata) == str):             
                 if(self.dual): 

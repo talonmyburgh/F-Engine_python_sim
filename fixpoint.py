@@ -107,7 +107,7 @@ class fixpoint(object):
     def sum(self, *args, **kwargs): #rewrite the sum method
         res = self.data.sum(*args, **kwargs) #use numpy sum method
         bits = self.bits + int(np.ceil(np.log2(self.data.size / res.size)))
-        result = fixpoint(bits, self.fraction, unsigned=self.unsigned)
+        result = fixpoint(bits, self.fraction, unsigned=self.unsigned, offset = self.offset, method = self.method)
         result.data = res
         result.normalise() #clip and stuff
         return result
