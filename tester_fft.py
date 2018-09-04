@@ -82,8 +82,8 @@ def iterffft_test(d,twid,shiftreg,bits,fraction,st,offset=0.0,method="round"):  
             W=twid[k]
             for j in range(jfirst,jlast + 1):
                 tmp = (W * data[j+distance]) >> bits - 1                         #slice off lower bit growth from multiply
-                tmp.bits =bits                                          #bits will = 2*bits+1 - hence - (bits+1)
-                tmp.fraction=fraction                                        #fraction will = 2*(frac1+frac2) - hence - (bits-1)
+                tmp.bits =bits                                                   #bits will = 2*bits+1 - hence - (bits+1)
+                tmp.fraction=fraction                                            #fraction will = 2*(frac1+frac2) - hence - (bits-1)
                 tmp.normalise()
                 
                 data[j+distance] = data[j]-tmp
@@ -100,25 +100,25 @@ def iterffft_test(d,twid,shiftreg,bits,fraction,st,offset=0.0,method="round"):  
 
 st=1
 while st <= N:
-    shiftreg = deque([0,0,0,1,1,1,1,1])
+    shiftreg = deque([0,1,1,1,1,1,1,1])
     #floatingsave
     fig, ax = plt.subplots(3, 2, sharex=True, sharey=False)
-    valsfl = iterfft_test(sig3,twidsfloat,st)
+    valsfl = iterfft_test(sig1,twidsfloat,st)
     ax[0,0].plot(np.real(valsfl),'g')
     
     #fixedsave
-    valsfx = iterffft_test(fsig3,twidsfix,shiftreg,bits=bits,fraction = fraction,method = method,st=st).to_complex()
+    valsfx = iterffft_test(fsig1,twidsfix,shiftreg,bits=bits,fraction = fraction,method = method,st=st).to_complex()
     ax[0,1].plot(np.real(valsfx),'r')
-    ax[0,0].set_title('REAL - iterfft and iterffft of cosine, stage: '+str(st))
+    ax[0,0].set_title('REAL, stage: '+str(st))
     
     ax[1,0].plot(np.imag(valsfl),'g')
     ax[1,1].plot(np.imag(valsfx),'r')
-    ax[1,0].set_title('IMAG - iterfft and iterffft of cosine, stage: '+str(st))
+    ax[1,0].set_title('IMAG, stage: '+str(st))
     
     ax[2,0].plot(np.abs(valsfl),'g')
     ax[2,1].plot(np.abs(valsfx),'r')
-    ax[2,0].set_title('ABS - iterfft and iterffft of cosine, stage: '+str(st))
+    ax[2,0].set_title('ABS, stage: '+str(st))
     
-    fig.savefig('../snapsf_engine/mix/st'+str(st)+'_mix.png')
+    fig.savefig('../snapsf_engine/cos/st'+str(st)+'_cos.png')
     fig.clear()
     st=st*2

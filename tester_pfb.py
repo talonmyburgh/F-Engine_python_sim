@@ -8,7 +8,7 @@ Created on Thu Aug 23 11:23:55 2018
 import numpy as np
 from pfb_fixed import FixPFB
 from pfb_floating import FloatPFB
-from fixpoint import cfixpoint,fixpoint
+from fixpoint import cfixpoint
 from collections import deque
 
 
@@ -17,6 +17,8 @@ n = np.arange(N)
 bits =18
 fraction = 18
 method = "truncate"
+taps = 8
+point = 64
 
 ####SIGNALS######
 sig1 = np.cos(1024//6*np.pi*n/N)/2.5
@@ -32,11 +34,11 @@ fsig2.from_complex(sig2)
 fsig3.from_complex(sig3)
 
 ####SHIFTREGISTER####
-shiftreg = deque([1,1,1,1,1,1])
+shiftreg = deque([0,0,0,0,0,0])
 
-pfb_floating_single = FloatPFB(64,8)
-pfb_fixed_single = FixPFB(64,8,bits,fraction,shiftreg = shiftreg,method=method)
-pfb_floating_single.run(sig1)
-pfb_fixed_single.run(sig1)
+pfb_floating_single = FloatPFB(point,taps)
+pfb_fixed_single = FixPFB(point,taps,bits,fraction,shiftreg = shiftreg,method=method)
+pfb_floating_single.run(sig2)
+pfb_fixed_single.run(fsig2)
 pfb_floating_single.show()
 pfb_fixed_single.show()
