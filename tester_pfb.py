@@ -12,19 +12,19 @@ from fixpoint import cfixpoint
 from collections import deque
 
 
-N = 1024
+N = 2048
 n = np.arange(N)
-bits =18
-fraction = 18
-method = "truncate"
+bits =24
+fraction = 24
+method = "round"
 taps = 8
-point = 64
+point = 128
 
 ####SIGNALS######
 sig1 = np.cos(1024//6*np.pi*n/N)/2.5
 sig2 = np.zeros(N)/2.5
 sig2[10:20]=1
-sig3 = sig1+1j*sig2
+sig3 = 1j*sig2+sig2
 
 fsig1 = cfixpoint(bits,fraction,method = method)
 fsig2 = cfixpoint(bits,fraction,method = method)
@@ -34,7 +34,7 @@ fsig2.from_complex(sig2)
 fsig3.from_complex(sig3)
 
 ####SHIFTREGISTER####
-shiftreg = deque([0,0,0,0,0,0])
+shiftreg = deque([0,1,0,1,0,1,0])
 
 pfb_floating_single = FloatPFB(point,taps)
 pfb_fixed_single = FixPFB(point,taps,bits,fraction,shiftreg = shiftreg,method=method)
@@ -42,3 +42,10 @@ pfb_floating_single.run(sig2)
 pfb_fixed_single.run(fsig2)
 pfb_floating_single.show()
 pfb_fixed_single.show()
+
+pfb_floating_dual = FloatPFB(point,taps,dual = True)
+pfb_fixed_dual = FixPFB(point,taps,bits,fraction,shiftreg=shiftreg,method = method, dual = True)
+pfb_floating_dual.run(sig3)
+pfb_fixed_dual.run(fsig3)
+pfb_floating_dual.show()
+pfb_fixed_dual.show()

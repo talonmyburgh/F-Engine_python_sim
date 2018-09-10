@@ -131,7 +131,7 @@ class FloatPFB(object):
         def _split(self,Y_k):
             length = np.size(Y_k,axis=1)
             self.H_k = np.zeros([self.N,length],dtype = np.complex)
-            self.G_k = np.ones([self.N,length],dtype=np.complex)
+            self.G_k = np.zeros([self.N,length],dtype = np.complex)
             
             #reverse the arrays for the splitting function correctly
             R_k = np.real(Y_k)
@@ -141,7 +141,7 @@ class FloatPFB(object):
             I_k = np.imag(Y_k)
             I_kflip = I_k.copy()
             I_kflip[1:] = I_kflip[1:][::-1]
-
+            
             self.G_k[:,:] = (1/2)*(R_k[:,:]+1j*I_k[:,:]+R_kflip[:,:]-1j*I_kflip[:,:])
             self.H_k[:,:] = (1/2j)*(R_k[:,:]+1j*I_k[:,:]-R_kflip[:,:]+1j*I_kflip[:,:])
         

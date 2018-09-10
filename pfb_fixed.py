@@ -116,10 +116,6 @@ class FixPFB(object):
             self.window = fixpoint(self.bits, self.fraction-1,unsigned = self.unsigned,offset = self.offset, method = self.method)
             self.window.from_float(WinDic[w](taps))     
             self.X_k = None                 #our output
-            
-            if(dual):                       #if dual, our two outputs
-                self.H_k = cfixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
-                self.G_k = cfixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
                 
             self.twids = make_fix_twiddle(self.N,self.bits,self.fraction-1,self.offset,self.method)
             self.twids = bitrevfixarray(self.twids,self.twids.data.size)
@@ -143,16 +139,12 @@ class FixPFB(object):
         """In the event that that dual polarisations have been selected, we need to 
         split out the data after and return the individual X_k values"""        
         def _split(self,Yk):
-            length = np.size(Yk.data,axis=1)
-            self.H_k.from_complex(np.zeros([self.N,length]))
-            self.G_k.from_complex(np.zeros([self.N,length]))
-            
             zeros = np.zeros(Yk.data.shape)
             tmpfx = fixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
             tmpfx.from_float(zeros)
             
-            R_k = cfixpoint(real=Yk.real,imag = tmpfx)
-            I_k = cfixpoint(real = tmpfx,imag = Yk.imag)
+            R_k = cfixpoint(real=Yk.real.copy(),imag = tmpfx.copy())
+            I_k = cfixpoint(real = tmpfx.copy(),imag = Yk.imag.copy())
             
             R_kflip = R_k.copy()
             R_kflip[1:] = R_kflip[1:][::-1]
@@ -160,20 +152,24 @@ class FixPFB(object):
             I_kflip = I_k.copy()
             I_kflip[1:] = I_kflip[1:][::-1]
             
-            cst2 = cfixpoint(1, 0,unsigned = self.unsigned,offset = self.offset, method = self.method)
-            cst3 = cfixpoint(1, 0,unsigned = self.unsigned,offset = self.offset, method = self.method)
-            cst2.from_complex(-1j)
-            cst3.from_complex(1)
+            cst = cfixpoint(2, 0,unsigned = False,offset = self.offset, method = self.method)
+            cstn = cfixpoint(2, 0,unsigned = False,offset = self.offset, method = self.method)
+            cstn.from_complex(-1j)
+            cst.from_complex(1j)
 
-            self.G_k[:,:] = (R_k[:,:]+cst2*I_k[:,:]+R_kflip[:,:]-cst2*I_kflip[:,:])
-            self.G_k >> (self.G_k.bits - self.bits)
+            self.G_k = (R_k+cst*I_k+R_kflip-cst*I_kflip).copy()
+            print(self.G_k.bits,self.G_k.fraction)           
+            self.G_k >> 6
             self.G_k.bits = self.bits
             self.G_k.fraction = self.fraction
+            self.G_k.normalise()
     
-            self.H_k[:,:] = (cst3*cst2*(R_k[:,:]+cst2*I_k[:,:]-R_kflip[:,:]+cst2*I_kflip[:,:]))
-            self.H_k >> (self.G_k.bits - self.bits)
+            self.H_k = (cstn*(R_k+cst*I_k-R_kflip+cst*I_kflip)).copy()
+            print(self.H_k.bits,self.H_k.fraction)
+            self.H_k >> 9
             self.H_k.bits = self.bits
             self.H_k.fraction = self.fraction
+            self.H_k.normalise()
             
 
         """Here we take the power spectrum of the outputs. The averaging scheme
@@ -213,8 +209,8 @@ class FixPFB(object):
                             X[:,i] = iterffft_natural_DIT(self._FIR(DATA[i*self.N-1:i*self.N+self.N-1]),self.twids,self.shiftreg.copy(),self.bits,self.fraction)
                     if(self.dual): 
                         self._split(X)
-                        self.H_k = self._pow(self.H_k)
-                        self.G_k = self._pow(self.G_k)
+#                        self.H_k = self._pow(self.H_k)
+#                        self.G_k = self._pow(self.G_k)
                     else:   
                         self.X_k = self._pow(X)
             else:
@@ -226,10 +222,10 @@ class FixPFB(object):
             if(self.dual):
                 fig = plt.figure(1)
                 plt.subplot(211)
-                plt.plot(n,self.H_k.to_float())
+                plt.plot(n,np.abs(self.H_k.to_complex()))
             
                 plt.subplot(212)
-                plt.plot(n,self.G_k.to_float())
+                plt.plot(n,np.abs(self.G_k.to_complex()))
                 if(save): fig.savefig(flnm)
                 
             else:
