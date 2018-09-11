@@ -157,16 +157,14 @@ class FixPFB(object):
             cstn.from_complex(-1j)
             cst.from_complex(1j)
 
-            self.G_k = (R_k+cst*I_k+R_kflip-cst*I_kflip).copy()
-            print(self.G_k.bits,self.G_k.fraction)           
-            self.G_k >> 6
+            self.G_k = (R_k+cst*I_k+R_kflip-cst*I_kflip).copy() 
+            self.G_k >> (self.G_k.bits - self.bits)
             self.G_k.bits = self.bits
             self.G_k.fraction = self.fraction
             self.G_k.normalise()
     
             self.H_k = (cstn*(R_k+cst*I_k-R_kflip+cst*I_kflip)).copy()
-            print(self.H_k.bits,self.H_k.fraction)
-            self.H_k >> 9
+            self.H_k >> (self.H_k.bits - self.bits)
             self.H_k.bits = self.bits
             self.H_k.fraction = self.fraction
             self.H_k.normalise()
@@ -209,8 +207,8 @@ class FixPFB(object):
                             X[:,i] = iterffft_natural_DIT(self._FIR(DATA[i*self.N-1:i*self.N+self.N-1]),self.twids,self.shiftreg.copy(),self.bits,self.fraction)
                     if(self.dual): 
                         self._split(X)
-#                        self.H_k = self._pow(self.H_k)
-#                        self.G_k = self._pow(self.G_k)
+                        self.H_k = self._pow(self.H_k)
+                        self.G_k = self._pow(self.G_k)
                     else:   
                         self.X_k = self._pow(X)
             else:
@@ -222,10 +220,10 @@ class FixPFB(object):
             if(self.dual):
                 fig = plt.figure(1)
                 plt.subplot(211)
-                plt.plot(n,np.abs(self.H_k.to_complex()))
+                plt.plot(n,np.abs(self.H_k.to_float()))
             
                 plt.subplot(212)
-                plt.plot(n,np.abs(self.G_k.to_complex()))
+                plt.plot(n,np.abs(self.G_k.to_float()))
                 if(save): fig.savefig(flnm)
                 
             else:

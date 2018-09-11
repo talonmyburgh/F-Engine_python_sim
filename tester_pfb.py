@@ -14,8 +14,8 @@ from collections import deque
 
 N = 2048
 n = np.arange(N)
-bits =24
-fraction = 24
+bits =18
+fraction = 18
 method = "round"
 taps = 8
 point = 128
@@ -34,7 +34,7 @@ fsig2.from_complex(sig2)
 fsig3.from_complex(sig3)
 
 ####SHIFTREGISTER####
-shiftreg = deque([0,1,0,1,0,1,0])
+shiftreg = deque([0,0,0,0,0,0,0])
 
 pfb_floating_single = FloatPFB(point,taps)
 pfb_fixed_single = FixPFB(point,taps,bits,fraction,shiftreg = shiftreg,method=method)
