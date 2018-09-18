@@ -111,10 +111,6 @@ class FloatPFB(object):
             
             self.window=WinDic[w](taps)     
             self.X_k = None                                 #our output
-            
-            if(dual):                                       #if dual, our two outputs
-                self.H_k = None
-                self.G_k = None
                 
             self.twids = make_twiddle(self.N)
             self.twids = bitrevarray(self.twids, len(self.twids))
@@ -129,24 +125,19 @@ class FloatPFB(object):
         """In the event that that dual polarisations have been selected, we need to 
         split out the data after and return the individual X_k values"""        
         def _split(self,Y_k):
-            length = np.size(Y_k,axis=1)
-            self.H_k = np.zeros([self.N,length],dtype = np.complex)
-            self.G_k = np.zeros([self.N,length],dtype = np.complex)
-            
             #reverse the arrays for the splitting function correctly
             R_k = np.real(Y_k)
             R_kflip = R_k.copy()
-            R_kflip[1:] = R_kflip[1:][::-1]
+            R_kflip[1:] = R_kflip[:0:-1]
             
             I_k = np.imag(Y_k)
             I_kflip = I_k.copy()
-            I_kflip[1:] = I_kflip[1:][::-1]
+            I_kflip[1:] = I_kflip[:0:-1]
             
-            self.G_k[:,:] = (1/2)*(R_k[:,:]+1j*I_k[:,:]+R_kflip[:,:]-1j*I_kflip[:,:])
-            self.H_k[:,:] = (1/2j)*(R_k[:,:]+1j*I_k[:,:]-R_kflip[:,:]+1j*I_kflip[:,:])
+            self.G_k = (1/2)*(R_k+1j*I_k+R_kflip-1j*I_kflip)
+            self.H_k = (1/2j)*(R_k+1j*I_k-R_kflip+1j*I_kflip)
         
         
-
         """Here we take the power spectrum of the outputs. The averaging scheme
         tells over what portion of the output data to take the power spectrum of.
         If alternatively a input file is specified, then average specifies over
@@ -207,31 +198,30 @@ class FloatPFB(object):
             else:
                 if(self.dual): 
                     self._split(X)
-                    self.G_k=self._pow(self.G_k)
-                    self.H_k=self._pow(self.H_k)
+#                    self.G_k=self._pow(self.G_k)
+#                    self.H_k=self._pow(self.H_k)
                 else:
                     self.X_k = self._pow(X)
                     
 
         """Plotting method to display the spectrum - has option to display input alongside"""
         def show(self,save=False,flnm = 'plot.png'):
-            n = np.arange(self.N)
             if(type(self.inputdata) == str):         #In the event we are writing to
                                                     #and reading from a file.
                 if(self.dual):
                     Val = np.load(self.outputdatadir)
                     fig = plt.figure(1)
                     plt.subplot(211)
-                    plt.plot(n,np.real(Val))
+                    plt.plot(np.real(Val))
                 
                     plt.subplot(212)
-                    plt.plot(n,np.imag(Val))
+                    plt.plot(np.imag(Val))
                     if(save): fig.savefig(flnm)
                     plt.show()
                     
                 else:
                     Val = np.load(self.outputdatadir)
-                    fig = plt.plot(n,Val)
+                    fig = plt.plot(Val)
                     if(save): fig.savefig(flnm)
                     plt.show()
             else:                                   #In the event we were given
@@ -239,14 +229,14 @@ class FloatPFB(object):
                 if(self.dual):
                     fig = plt.figure(1)
                     plt.subplot(211)
-                    plt.plot(n,self.H_k)
+                    plt.plot(np.abs(self.H_k))
                 
                     plt.subplot(212)
-                    plt.plot(n,self.G_k)
+                    plt.plot(np.abs(self.G_k))
                     if(save): fig.savefig(flnm)
                     plt.show()
                     
                 else:
-                    fig = plt.plot(n,self.X_k)
+                    fig = plt.plot(self.X_k)
                     if(save): fig.savefig(flnm)
                     plt.show()

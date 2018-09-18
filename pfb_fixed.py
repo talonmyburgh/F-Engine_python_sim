@@ -138,32 +138,23 @@ class FixPFB(object):
         
         """In the event that that dual polarisations have been selected, we need to 
         split out the data after and return the individual X_k values"""        
-        def _split(self,Yk):
-            zeros = np.zeros(Yk.data.shape)
-            tmpfx = fixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
-            tmpfx.from_float(zeros)
-            
-            R_k = cfixpoint(real=Yk.real.copy(),imag = tmpfx.copy())
-            I_k = cfixpoint(real = tmpfx.copy(),imag = Yk.imag.copy())
+        def _split(self,Yk):            
+            R_k = Yk.real.copy()
+            I_k = Yk.imag.copy()
             
             R_kflip = R_k.copy()
-            R_kflip[1:] = R_kflip[1:][::-1]
+            R_kflip[1:] = R_kflip[:0:-1]
             
             I_kflip = I_k.copy()
-            I_kflip[1:] = I_kflip[1:][::-1]
-            
-            cst = cfixpoint(2, 0,unsigned = False,offset = self.offset, method = self.method)
-            cstn = cfixpoint(2, 0,unsigned = False,offset = self.offset, method = self.method)
-            cstn.from_complex(-1j)
-            cst.from_complex(1j)
+            I_kflip[1:] = I_kflip[:0:-1]
 
-            self.G_k = (R_k+cst*I_k+R_kflip-cst*I_kflip).copy() 
+            self.G_k = cfixpoint(real = R_k + R_kflip, imag = I_k - I_kflip)
             self.G_k >> (self.G_k.bits - self.bits)
             self.G_k.bits = self.bits
             self.G_k.fraction = self.fraction
             self.G_k.normalise()
     
-            self.H_k = (cstn*(R_k+cst*I_k-R_kflip+cst*I_kflip)).copy()
+            self.H_k =cfixpoint(real = I_k + I_kflip, imag = R_kflip - R_k)
             self.H_k >> (self.H_k.bits - self.bits)
             self.H_k.bits = self.bits
             self.H_k.fraction = self.fraction
@@ -216,17 +207,16 @@ class FixPFB(object):
 
         """Plotting method to display the spectrum - has option to display input alongside"""
         def show(self,save=False,flnm = 'plot.png'):
-            n = np.arange(self.N)
             if(self.dual):
                 fig = plt.figure(1)
                 plt.subplot(211)
-                plt.plot(n,np.abs(self.H_k.to_float()))
+                plt.plot(np.abs(self.H_k.to_float()))
             
                 plt.subplot(212)
-                plt.plot(n,np.abs(self.G_k.to_float()))
+                plt.plot(np.abs(self.G_k.to_float()))
                 if(save): fig.savefig(flnm)
                 
             else:
-                fig = plt.plot(n,self.X_k.to_float())
+                fig = plt.plot(self.X_k.to_float())
                 if(save): fig.savefig(flnm)
                 

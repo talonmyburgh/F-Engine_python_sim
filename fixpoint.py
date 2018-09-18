@@ -12,12 +12,12 @@ PFB and compare it with one implemented with CASPER tools"""
 import numpy as np
 from collections import Counter
 #############################################################################
+
 class fixpoint(object):
     #takes number bits in full, number that is fractional part, minimum and 
     #maximum number representable, unsigned or signed integer, rounding or 
     #truncation and offset val
     def __init__(self,bits,fraction,min_int=None, max_int=None, unsigned=False, offset=0.0, method = "round",FPTYPE = np.int64):
-        
         self.FPTYPE = FPTYPE
         self.method = method
         self.range = 2 ** bits #The range of the number (ie max)
@@ -37,7 +37,6 @@ class fixpoint(object):
         else:
             self.max = max_int
 
-    
     @property
     def bits(self): #define bits as a somewhat 'private' property
         return int(np.log2(self.range))
@@ -159,8 +158,11 @@ class fixpoint(object):
         result.from_float(self.to_float())
         return result
     
-    def __rshift__(self,steps):
-        self.data >>= steps
+    def __rshift__(self,steps):#slicing and right shifting technique - allows for rounding
+        if(self.method == "round"):
+            self.data = np.round(self.data/(2**steps)).astype(self.FPTYPE)
+        else:    
+            self.data >>= steps
         return self
     
     def __lshift__(self,steps):
@@ -316,5 +318,4 @@ class cfixpoint(object):
         return tmpcfxpt
     
     __str__ = __repr__
-    
     
