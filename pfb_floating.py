@@ -10,20 +10,20 @@ import numpy as np
 # Bit reversal algorithms used for the iterative fft's
 # =============================================================================
 def bit_rev(a, bits):
-    a_copy = a
-    N = 1<<bits    
+    a_copy = a.copy()
+    N = 1<<bits
     for i in range(1,bits):
         a >>=1
         a_copy <<=1
-        a_copy |= (a&1)
-    a_copy &= N-1
+        a_copy |= (a[:]&1)
+    a_copy[:] &= N-1
     return a_copy
 
-def bitrevarray(array,N):
-    bits = int(np.log2(N))
+def bitrevarray(array,N): #takes an array of length N which must be a power of two
+    bits = int(np.log2(N)) #how many bits it takes to represent all numbers in array
     A = np.zeros(N,dtype=np.complex)
-    for k in range(0, N):
-        A[bit_rev(k,bits)] = array[k]
+    a = np.arange(N)
+    A[bit_rev(a,bits)] = array[:]
     return A
 
 # =============================================================================
@@ -54,29 +54,29 @@ def iterfft_bitorder_in_DIT(a):
 # =============================================================================
 
 def make_twiddle(N):                             #generate array of needed twiddle
-    arr = np.zeros(N//2,dtype=np.complex)
-    for i in range(N//2):
-        arr[i] = np.exp(-2*i*np.pi*1j/N)
+    i=np.arange(N//2)
+    arr = np.exp(-2*i*np.pi*1j/N)
     return arr
+
 
 def iterfft_natural_in_DIT(s,w,staged):
     a = np.asarray(s,dtype = np.complex)
     N = a.size                                  #how long is data stream
-    pairs_in_group = N//2                       #how many butterfly pairs per group - starts at 1/2*full data length obviously
     num_of_groups = 1                           #number of groups - how many subarrays are there?
     distance = N//2                             #how far between each fft arm?
     if (staged is not None): bnd = staged
     else: bnd = N
+    
     while num_of_groups < bnd:                    #basically iterates through stages
         for k in range(num_of_groups):          #iterate through each subarray
-            jfirst = 2*k*pairs_in_group         #index to beginning of a group
-            jlast = jfirst + pairs_in_group - 1 #first index plus offset - used to index whole group
+            jfirst = 2*k*distance         #index to beginning of a group
+            jlast = jfirst + distance - 1 #first index plus offset - used to index whole group
             W=w[k]
-            for j in range(jfirst, jlast + 1):
-                tmp = W*a[j+distance]
-                a[j+distance] = a[j]-tmp
-                a[j] = a[j]+tmp
-        pairs_in_group //=2
+            slc1 = slice(jfirst,jlast+1,1)
+            slc2 = slice(jfirst+distance, jlast+1+distance,1)
+            tmp = W*a[slc2]
+            a[slc2] = a[slc1]-tmp
+            a[slc1] = a[slc1]+tmp
         num_of_groups *=2
         distance //=2
     if(staged == N or staged == None): 
@@ -103,7 +103,11 @@ class FloatPFB(object):
             self.dual = dual                                #whether you're performing dual polarisations or not
             self.reg =np.zeros([N,taps])                    #our fir register size filled with zeros orignally
             self.inputdatadir = None
-            self.staged = 2**staged
+            
+            if (staged is not None):
+                self.staged = 2**staged
+            else:
+                self.staged = staged
             if(datasrc is not None and type(datasrc)==str):             #if input data file is specified
                 self.inputdatadir = datasrc
                 self.outputdatadir = datasrc[:-4]+"out.npy"
@@ -198,15 +202,13 @@ class FloatPFB(object):
             
             if(self.dual and self.staged is None): 
                 self._split(X)
-                self.G_k=self._pow(self.G_k)
-                self.H_k=self._pow(self.H_k)
             elif(not self.dual and self.staged is None):
-                self.X_k = self._pow(X)
+                self.X_k = X
             elif(self.dual and self.staged is not None):
-                self.G_k = self._pow(X)
-                self.H_k = self._pow(X)
+                self.G_k = X
+                self.H_k = X
             else:
-                self.X_k = self._pow(X)
+                self.X_k = X
                     
             if(self.inputdatadir is not None):             
                 if(self.dual): 

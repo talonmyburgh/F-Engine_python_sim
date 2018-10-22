@@ -11,20 +11,20 @@ from fixpoint import fixpoint, cfixpoint
 # Bit reversal algorithms used for the iterative fft's
 # =============================================================================
 def bit_rev(a, bits):
-    a_copy = a
-    N = 1<<bits    
+    a_copy = a.copy()
+    N = 1<<bits
     for i in range(1,bits):
         a >>=1
         a_copy <<=1
-        a_copy |= (a&1)
-    a_copy &= N-1
+        a_copy |= (a[:]&1)
+    a_copy[:] &= N-1
     return a_copy
 
-def bitrevfixarray(array,N):
-    bits = int(np.log2(N))
-    A=array.copy()
-    for k in range(0, N):
-        A[bit_rev(k,bits)] = array[k]
+def bitrevfixarray(array,N): #takes an array of length N which must be a power of two
+    bits = int(np.log2(N)) #how many bits it takes to represent all numbers in array
+    A = array.copy()
+    a = np.arange(N)
+    A[bit_rev(a,bits)] = array[:]
     return A
 
 # =============================================================================
@@ -35,13 +35,8 @@ from collections import deque
 
 def make_fix_twiddle(N,bits,fraction,offset=0.0, method="round"):
     twids = cfixpoint(bits,fraction,offset = offset, method = method)
-    tmp = cfixpoint(bits,fraction,offset=offset, method = method)
-    twids.from_complex(np.zeros(N//2,dtype=np.complex))
-    for i in range(0,N//2):
-        tmp.from_complex(np.exp(-2*i*np.pi*1j/N))
-        twids[i] = tmp
+    twids.from_complex(np.exp(-2*np.arange(N//2)*np.pi*1j/N))
     return twids
-
 
 def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,staged,offset=0.0,method="round"):  #parse in data,tiddle factors (must be in bit reversed order for natural order in),
                                                                                  #how many bits fixpoint numbers are, fraction bits they are, offset, and rounding scheme.
@@ -54,30 +49,29 @@ def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,staged,offset=0.0,meth
         shiftreg = deque(shiftreg)
     else:
         raise ValueError("shift register must be of type list or deque, and its length must be that of log2(data length)")
-    
-    pairs_in_group = N//2                                                        #how many butterfly pairs per group - starts at 1/2*full data length obviously
+        
     num_of_groups = 1                                                            #number of groups - how many subarrays are there?
     distance = N//2   
     if(staged is not None): bnd = staged
     else: bnd = N                                                           #how far between each fft arm?
     while num_of_groups < bnd:                                                     #basically iterates through stages
         for k in range(num_of_groups):                                           #iterate through each subarray
-            jfirst = 2*k*pairs_in_group                                          #index to beginning of a group
-            jlast = jfirst + pairs_in_group - 1                                  #first index plus offset - used to index whole group
+            jfirst = 2*k*distance                                          #index to beginning of a group
+            jlast = jfirst + distance - 1                                  #first index plus offset - used to index whole group
             W=twid[k]
-            for j in range(jfirst,jlast+1):
-                tmp = (W * data[j+distance]) >> bits - 1                         #slice off lower bit growth from multiply
-                tmp.bits =bits                                                   #bits will = 2*bits+1 - hence - (bits+1)
-                tmp.fraction=fraction                                            #fraction will = 2*(frac1+frac2) - hence - (bits-1)
-                tmp.normalise()
-                
-                data[j+distance] = data[j]-tmp
-                data[j] = data[j]+tmp
+
+            slc1 = slice(jfirst,jlast+1,1)
+            slc2 = slice(jfirst+distance, jlast+1+distance,1)
+            tmp = (W * data[slc2]) >> bits - 1                         #slice off lower bit growth from multiply
+            tmp.bits =bits                                                   #bits will = 2*bits+1 - hence - (bits+1)
+            tmp.fraction=fraction                                            #fraction will = 2*(frac1+frac2) - hence - (bits-1)
+            tmp.normalise()
+            data[slc2] = data[slc1]-tmp
+            data[slc1] = data[slc1]+tmp
         if shiftreg.pop():                                                       #implement FFT shift and then normalise to correct at end of stage
             data>>1
         data.normalise()
         
-        pairs_in_group //=2
         num_of_groups *=2
         distance //=2
     if(staged == N or staged == None): 
@@ -106,7 +100,10 @@ class FixPFB(object):
             self.unsigned = unsigned
             self.offset = offset
             self.method = method
-            self.staged = 2**staged
+            if (staged is not None):
+                self.staged = 2**staged
+            else:
+                self.staged = staged
             
             self.reg_real = fixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
             self.reg_real.from_float(np.zeros([N,taps],dtype = np.int64)) #our fir register size filled with zeros orignally
@@ -139,7 +136,7 @@ class FixPFB(object):
             X_real = self.reg_real*self.window
             X_real >> self.bits +1
             X_imag = self.reg_imag*self.window
-            X_imag >> (self.bits +1)
+            X_imag >> self.bits +1
             X = cfixpoint(real = X_real.sum(axis=1),imag = X_imag.sum(axis =1))
             X >> int(np.log2(self.taps))
             X.bits = self.bits
@@ -150,7 +147,7 @@ class FixPFB(object):
             return X
         
         """In the event that that dual polarisations have been selected, we need to 
-        split out the data after and return the individual X_k values"""        
+        split out the data after and return the individual X_k values"""
         def _split(self,Yk):            
             R_k = Yk.real.copy()
             I_k = Yk.imag.copy()
@@ -214,15 +211,13 @@ class FixPFB(object):
             
             if(self.dual and self.staged is None): 
                 self._split(X)
-                self.G_k=self._pow(self.G_k)
-                self.H_k=self._pow(self.H_k)
             elif(not self.dual and self.staged is None):
-                self.X_k = self._pow(X)
+                self.X_k = X
             elif(self.dual and self.staged is not None):
-                self.G_k = self._pow(X)
-                self.H_k = self._pow(X)
+                self.G_k = X
+                self.H_k = X
             else:
-                self.X_k = self._pow(X)
+                self.X_k = X
             
             if(self.inputdatadir is not None):             
                 if(self.dual): 

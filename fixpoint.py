@@ -11,6 +11,7 @@ PFB and compare it with one implemented with CASPER tools"""
 ##############################IMPORTS########################################
 import numpy as np
 from collections import Counter
+from numba import jit
 #############################################################################
 
 class fixpoint(object):

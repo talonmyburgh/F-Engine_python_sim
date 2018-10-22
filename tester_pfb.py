@@ -11,6 +11,8 @@ from pfb_floating import FloatPFB
 from fixpoint import cfixpoint
 from collections import deque
 import matplotlib.pyplot as plt
+from time import time
+
 
 
 N = 12288 #12k data points
@@ -48,25 +50,64 @@ fsig1.from_complex(twotone)
 #fsampmeerkat = cfixpoint(bits,fraction,method = method)
 #fsampmeerkat.from_complex(sampmeerkat)
 
-####SHIFTREGISTER####
+s = np.arange(2.5,12.5,0.5)
+x = np.arange(point)
+outputpowfloat = np.zeros(20)
+outputpowfix = outputpowfloat.copy()
+inputpow = np.zeros(20)
 st=1
-while st <= 10:
-    print(st)
-#    shiftreg = deque([0,0,0,0,0,0,0,0,0,0]) #test overflow
-    shiftreg = deque([1,1,1,1,1,1,1,1,1,1]) #test underflow
-    
-    pfb_floating_single = FloatPFB(point,taps,staged = st)
-    pfb_fixed_single = FixPFB(point,taps,bits,fraction,shiftreg = shiftreg,method=method,staged = st)
-    pfb_floating_single.run(twotone)
-    pfb_fixed_single.run(fsig1)
-    fig, ax = plt.subplots(2, 1, sharex=True, sharey=False)
-    ax[0].plot(pfb_floating_single.X_k[:,-1],'k')
-    ax[0].set_title('floating-point, stage: '+str(st))
-    ax[1].plot(pfb_fixed_single.X_k.to_float()[:,-1],'k')
-    ax[1].set_title('fixed-point, stage: '+str(st))
-    fig.savefig('../snapsf_engine/PFB_twotone/shiftoned/st'+str(st)+'_twotone.png')
-    fig.clear()
-    st+=1
+#shiftreg = deque([0,0,0,0,0,0,0,0,0,0]) #test overflow
+#shiftreg = deque([1,1,1,1,1,1,1,1,1,1]) #test underflow
+#shiftreg = deque([0,1,0,1,0,1,0,1,0,1]) #test canada
+shiftreg = deque([0,0,0,0,0,1,1,1,1,1]) #test end
+#shiftreg = deque([1,1,1,1,1,0,0,0,0,0]) #test front
+
+pfb_floating_single = FloatPFB(point,taps)
+pfb_fixed_single = FixPFB(point,taps,bits,fraction,shiftreg = shiftreg,method=method)
+
+#while st < 21:
+#    print(st)
+#    cs1 = np.cos(983.04*np.pi*(n/N),dtype = np.float64)/s[st-1]
+#    cs2 = np.cos(1966.08*np.pi*(n/N),dtype = np.float64)/s[st-1]
+#    twotone = cs1+cs2
+#    fsig1.from_complex(twotone)
+#    inputpow[st-1] = np.sum(np.abs(twotone)**2)
+#    pfb_floating_single.run(twotone)
+#    pfb_fixed_single.run(fsig1)
+#    outputpowfloat[st-1] = np.sum(np.abs(pfb_floating_single.X_k[:,-1])**2)
+#    outputpowfix[st-1] = np.sum(np.abs(pfb_fixed_single.X_k.to_complex()[:,-1])**2)
+#    st+=1
+
+#fig = plt.figure()
+#plt.plot(inputpow, outputpowfloat,'k')
+#plt.savefig('../snapsf_engine/PFB_twotone/shiftcanada/twotone_power_flt_20.png')
+#plt.show()
+#fig = plt.figure()
+#plt.plot(inputpow, outputpowfix,'k')
+#plt.savefig('../snapsf_engine/PFB_twotone/shiftcanada/twotone_power_fxd_20.png')
+#plt.show()
+#error = np.abs(outputpowfloat-outputpowfix)
+#t8 = time()    
+#pfb_floating_single.run(twotone)
+#t9 = time()
+#print("float ", t9-t8)
+#plt.plot(np.abs(pfb_floating_single.X_k))
+
+#plt.show()
+t0 = time()
+pfb_fixed_single.run(fsig1)
+t1 = time()
+print("fixed ", t1-t0)
+plt.plot(np.abs(pfb_fixed_single.X_k.to_complex()))
+plt.show()
+#fig, ax = plt.plot(2, 1, sharex=False, sharey=False)
+#ax[0].hist(np.abs(pfb_floating_single.X_k[:,-1]),255,color='k')
+#ax[0].set_title('floating-point, stage: '+str(st))
+#ax[1].hist(np.abs(pfb_fixed_single.X_k.to_complex()[:,-1]),255,color='k')
+#ax[1].set_title('fixed-point, stage: '+str(st))
+#fig.savefig('../snapsf_engine/PFB_twotone/shiftcanada/unpowered/hist/st'+str(st)+'_twotone_hist.png')
+#fig.clear()
+
 
 #
 #b=plt.plot(np.average(pfb_fixed_single.X_k.data,axis = 1))
