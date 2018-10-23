@@ -6,7 +6,6 @@ Created on Thu Aug 16 16:13:40 2018
 """
 import numpy as np
 from fixpoint import fixpoint, cfixpoint
-
 # =============================================================================
 # Bit reversal algorithms used for the iterative fft's
 # =============================================================================
@@ -31,8 +30,6 @@ def bitrevfixarray(array,N): #takes an array of length N which must be a power o
 # FFT: natural data order in, bit reversed twiddle factors, bit reversed 
 # order out.
 # =============================================================================
-from collections import deque
-
 def make_fix_twiddle(N,bits,fraction,offset=0.0, method="round"):
     twids = cfixpoint(bits,fraction,offset = offset, method = method)
     twids.from_complex(np.exp(-2*np.arange(N//2)*np.pi*1j/N))
@@ -43,12 +40,8 @@ def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,staged,offset=0.0,meth
     data=DATA.copy()
     N = data.data.size                                                           #how long is data stream
     stages = int(np.log2(N))
-    if(type(shiftreg) == deque and len(shiftreg)==stages):
-        shiftreg = shiftreg
-    elif(type(shiftreg)==list and len(shiftreg)==stages):
-        shiftreg = deque(shiftreg)
-    else:
-        raise ValueError("shift register must be of type list or deque, and its length must be that of log2(data length)")
+    if(len(shiftreg)!=stages and type(shiftreg) is not list):
+        raise ValueError("shift register must be of type list, and its length must be that of log2(data length)")
         
     num_of_groups = 1                                                            #number of groups - how many subarrays are there?
     distance = N//2   
