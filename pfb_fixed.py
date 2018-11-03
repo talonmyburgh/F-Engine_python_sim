@@ -82,13 +82,13 @@ import matplotlib.pyplot as plt
 class FixPFB(object):
         """This function takes point size, how many taps, what percentage of total data to average over,
         what windowing function, whether you're running dual polarisations and staged (which stage) or not"""
-        def __init__(self, N, taps, bits, fraction,shiftreg, unsigned = False, offset = 0.0,method = "round",  avgperc = 1, datasrc = None, w = 'hanning',dual = False,staged = None):
+        def __init__(self, N, taps, bits_in, bits_out, shiftreg, unsigned = False, offset = 0.0,method = "round",  avgperc = 1, datasrc = None, w = 'hanning',dual = False,staged = None):
             self.N = N                   #how many points
             self.avg = avgperc           #what averaging
             self.dual = dual             #whether you're performing dual polarisations or not
             self.taps = taps
-            self.bits = bits
-            self.fraction = fraction
+            self.bits_in = bits_in
+            self.bits_out = bits_out
             self.shiftreg = shiftreg
             self.unsigned = unsigned
             self.offset = offset
@@ -98,11 +98,11 @@ class FixPFB(object):
             else:
                 self.staged = staged
             
-            self.reg_real = fixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
+            self.reg_real = fixpoint(self.bits_in, self.bits_in,unsigned = self.unsigned,offset = self.offset, method = self.method)
             self.reg_real.from_float(np.zeros([N,taps],dtype = np.int64)) #our fir register size filled with zeros orignally
             self.reg_imag = self.reg_real.copy()
             
-            self.inputdata = cfixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
+            self.inputdata = cfixpoint(self.bits_in, self.bits_in,unsigned = self.unsigned,offset = self.offset, method = self.method)
             self.inputdatadir = None
             if(datasrc is not None and type(datasrc)==str):             #if input data file is specified
                 self.inputdatadir = datasrc
@@ -116,24 +116,24 @@ class FixPFB(object):
                 'blackman': np.blackman,
                 }
             
-            self.window = fixpoint(self.bits, self.fraction-1,unsigned = self.unsigned,offset = self.offset, method = self.method)
+            self.window = fixpoint(self.bits_out, self.bits_out-1,unsigned = self.unsigned,offset = self.offset, method = self.method)
             self.window.from_float(WinDic[w](taps))     
             self.X_k = None                 #our output
                 
-            self.twids = make_fix_twiddle(self.N,self.bits,self.fraction-1,self.offset,self.method)
+            self.twids = make_fix_twiddle(self.N,self.bits_out,self.bits_out-1,self.offset,self.method)
             self.twids = bitrevfixarray(self.twids,self.twids.data.size)
             
         """Takes data segment (N long) and appends each value to each fir.
         Returns data segment (N long) that is the sum of fircontents*window"""
         def _FIR(self,x):
             X_real = self.reg_real*self.window
-            X_real >> self.bits +1
+            print(self.reg_real.bits)
             X_imag = self.reg_imag*self.window
-            X_imag >> self.bits +1
             X = cfixpoint(real = X_real.sum(axis=1),imag = X_imag.sum(axis =1))
-            X >> int(np.log2(self.taps))
-            X.bits = self.bits
-            X.fraction = self.fraction
+            print(X.bits)
+            X >> (X.bits - self.bits_out)
+            X.bits = self.bits_out
+            X.fraction = self.bits_out
             X.normalise()
             self.reg_real.data = np.column_stack((x.real.data,self.reg_real.data))[:,:-1]
             self.reg_imag.data = np.column_stack((x.imag.data,self.reg_imag.data))[:,:-1]     #push and pop from FIR register array
@@ -153,12 +153,12 @@ class FixPFB(object):
 
             self.G_k = cfixpoint(real = R_k + R_kflip, imag = I_k - I_kflip)
             self.G_k >> 1
-            self.G_k.bits = self.bits
+            self.G_k.bits = self.bits_out
             self.G_k.normalise()
     
             self.H_k =cfixpoint(real = I_k + I_kflip, imag = R_kflip - R_k)
             self.H_k >> 1
-            self.H_k.bits = self.bits
+            self.H_k.bits = self.bits_out
             self.H_k.normalise()
             
 
@@ -171,7 +171,7 @@ class FixPFB(object):
             else:
                 iterr = int(1/self.avg)
                 rng = len(X.data[0,:])//iterr
-                Xt = fixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
+                Xt = fixpoint(self.bits_out, self.bits_out,unsigned = self.unsigned,offset = self.offset, method = self.method)
                 Xt.from_float(np.zeros([self.N,iterr]))
                 for i in range(0,iterr):
                     if(i ==0):
@@ -186,6 +186,8 @@ class FixPFB(object):
         you parse the data and the PFB will compute the spectrum (continuous data mode to still add)"""
         def run(self,DATA, cont = False):
             if (DATA is not None):                                  #if we are using an input data array
+                if(self.bits_in != DATA.bits):
+                    raise ValueError("Input data must match precision specified for input data")
                 self.inputdata = DATA
             elif(self.inputdata is None):
                 raise ValueError ("No input data for PFB specified.")
@@ -193,14 +195,14 @@ class FixPFB(object):
             size = self.inputdata.data.shape[0]                           #get length of data stream
             stages = size//self.N                               #how many cycles of commutator
             
-            X = cfixpoint(self.bits, self.fraction,unsigned = self.unsigned,offset = self.offset, method = self.method)
+            X = cfixpoint(self.bits_out, self.bits_out,unsigned = self.unsigned,offset = self.offset, method = self.method)
             X.from_complex(np.zeros([self.N,stages]))           #will be tapsize x stage
             
             for i in range(0,stages):                           #for each stage, populate all firs, and run FFT once
                 if(i == 0):
-                    X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),self.twids,self.shiftreg.copy(),self.bits,self.fraction,self.staged)
+                    X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,self.staged)
                 else:
-                    X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]),self.twids,self.shiftreg.copy(),self.bits,self.fraction,self.staged)
+                    X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]),self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,self.staged)
             
             if(self.dual and self.staged is None): 
                 self._split(X)
