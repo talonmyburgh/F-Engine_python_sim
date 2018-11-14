@@ -30,13 +30,13 @@ def bitrevfixarray(array,N): #takes an array of length N which must be a power o
 # FFT: natural data order in, bit reversed twiddle factors, bit reversed 
 # order out.
 # =============================================================================
-def make_fix_twiddle(N,bits,fraction,offset=0.0, method="round"):
-    twids = cfixpoint(bits,fraction,offset = offset, method = method)
+def make_fix_twiddle(N,bits,fraction,offset=0.0):
+    twids = cfixpoint(bits,fraction,offset = offset, method = "ROUND")
     twids.from_complex(np.exp(-2*np.arange(N//2)*np.pi*1j/N))
     return twids
 
-def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,staged,offset=0.0,method="round"):  #parse in data,tiddle factors (must be in bit reversed order for natural order in),
-                                                                                 #how many bits fixpoint numbers are, fraction bits they are, offset, and rounding scheme.
+def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,staged=None):  #parse in data,tiddle factors (must be in bit reversed order for natural order in),
+                                                                                #how many bits fixpoint numbers are, fraction bits they are, offset, and rounding scheme.
     data=DATA.copy()
     N = data.data.size                                                           #how long is data stream
     stages = int(np.log2(N))
@@ -82,9 +82,9 @@ import matplotlib.pyplot as plt
 class FixPFB(object):
         """This function takes point size, how many taps, what percentage of total data to average over,
         what windowing function, whether you're running dual polarisations and staged (which stage) or not"""
-        def __init__(self, N, taps, bits_in, bits_out, shiftreg, unsigned = False, offset = 0.0,method = "round",  avgperc = 1, datasrc = None, w = 'hanning',dual = False,staged = None):
+        def __init__(self, N, taps, bits_in, bits_out, shiftreg, unsigned = False, offset = 0.0, chan_acc = 1, datasrc = None, w = 'hanning',dual = False,staged = None):
             self.N = N                   #how many points
-            self.avg = avgperc           #what averaging
+            self.chan_acc = chan_acc           #what averaging
             self.dual = dual             #whether you're performing dual polarisations or not
             self.taps = taps
             self.bits_in = bits_in
@@ -92,17 +92,16 @@ class FixPFB(object):
             self.shiftreg = shiftreg
             self.unsigned = unsigned
             self.offset = offset
-            self.method = method
             if (staged is not None):
                 self.staged = 2**staged
             else:
                 self.staged = staged
             
-            self.reg_real = fixpoint(self.bits_in, self.bits_in,unsigned = self.unsigned,offset = self.offset, method = self.method)
+            self.reg_real = fixpoint(self.bits_in, self.bits_in,unsigned = self.unsigned,offset = self.offset, method = "ROUND_UP")
             self.reg_real.from_float(np.zeros([N,taps],dtype = np.int64)) #our fir register size filled with zeros orignally
             self.reg_imag = self.reg_real.copy()
             
-            self.inputdata = cfixpoint(self.bits_in, self.bits_in,unsigned = self.unsigned,offset = self.offset, method = self.method)
+            self.inputdata = cfixpoint(self.bits_in, self.bits_in,unsigned = self.unsigned,offset = self.offset, method = "ROUND_UP")
             self.inputdatadir = None
             if(datasrc is not None and type(datasrc)==str):             #if input data file is specified
                 self.inputdatadir = datasrc
@@ -116,25 +115,26 @@ class FixPFB(object):
                 'blackman': np.blackman,
                 }
             
-            self.window = fixpoint(self.bits_out, self.bits_out-1,unsigned = self.unsigned,offset = self.offset, method = self.method)
+            self.window = fixpoint(self.bits_out, self.bits_out-1,unsigned = self.unsigned,offset = self.offset, method = "ROUND_UP")
             self.window.from_float(WinDic[w](taps))     
             self.X_k = None                 #our output
                 
-            self.twids = make_fix_twiddle(self.N,self.bits_out,self.bits_out-1,self.offset,self.method)
+            self.twids = make_fix_twiddle(self.N,self.bits_out,self.bits_out-1,self.offset)
             self.twids = bitrevfixarray(self.twids,self.twids.data.size)
             
         """Takes data segment (N long) and appends each value to each fir.
         Returns data segment (N long) that is the sum of fircontents*window"""
         def _FIR(self,x):
             X_real = self.reg_real*self.window
-            print(self.reg_real.bits)
             X_imag = self.reg_imag*self.window
             X = cfixpoint(real = X_real.sum(axis=1),imag = X_imag.sum(axis =1))
-            print(X.bits)
+            X.method = "ROUND_UP" #adjust so that it now uses rounding like in the FFT (unlike FIR)
             X >> (X.bits - self.bits_out)
             X.bits = self.bits_out
             X.fraction = self.bits_out
             X.normalise()
+            print(X.data.size)
+            
             self.reg_real.data = np.column_stack((x.real.data,self.reg_real.data))[:,:-1]
             self.reg_imag.data = np.column_stack((x.imag.data,self.reg_imag.data))[:,:-1]     #push and pop from FIR register array
             return X
@@ -165,13 +165,13 @@ class FixPFB(object):
         """Here we take the power spectrum of the outputs. The averaging scheme
         tells over what portion of the output data to take the power spectrum of."""        
         def _pow(self,X):
-            if(self.avg ==1):
+            if(self.chan_acc ==1):
                 retX = X.real*X.real + X.imag*X.imag
                 return retX
             else:
-                iterr = int(1/self.avg)
+                iterr = int(1/self.chan_acc)
                 rng = len(X.data[0,:])//iterr
-                Xt = fixpoint(self.bits_out, self.bits_out,unsigned = self.unsigned,offset = self.offset, method = self.method)
+                Xt = fixpoint(self.bits_out, self.bits_out,unsigned = self.unsigned,offset = self.offset, method = "ROUND")
                 Xt.from_float(np.zeros([self.N,iterr]))
                 for i in range(0,iterr):
                     if(i ==0):
@@ -195,14 +195,14 @@ class FixPFB(object):
             size = self.inputdata.data.shape[0]                           #get length of data stream
             stages = size//self.N                               #how many cycles of commutator
             
-            X = cfixpoint(self.bits_out, self.bits_out,unsigned = self.unsigned,offset = self.offset, method = self.method)
+            X = cfixpoint(self.bits_out, self.bits_out,unsigned = self.unsigned,offset = self.offset, method = "ROUND")
             X.from_complex(np.zeros([self.N,stages]))           #will be tapsize x stage
             
             for i in range(0,stages):                           #for each stage, populate all firs, and run FFT once
                 if(i == 0):
-                    X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,self.staged)
+                    X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,staged=self.staged)
                 else:
-                    X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]),self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,self.staged)
+                    X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]),self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,staged=self.staged)
             
             if(self.dual and self.staged is None): 
                 self._split(X)

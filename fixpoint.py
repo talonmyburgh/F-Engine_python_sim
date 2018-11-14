@@ -11,14 +11,12 @@ PFB and compare it with one implemented with CASPER tools"""
 ##############################IMPORTS########################################
 import numpy as np
 from collections import Counter
-from numba import jit
 #############################################################################
-
 class fixpoint(object):
     #takes number bits in full, number that is fractional part, minimum and 
     #maximum number representable, unsigned or signed integer, rounding or 
     #truncation and offset val
-    def __init__(self,bits,fraction,min_int=None, max_int=None, unsigned=False, offset=0.0, method = "round",FPTYPE = np.int64):
+    def __init__(self,bits,fraction,min_int=None, max_int=None, unsigned=False, offset=0.0, method = "ROUND",FPTYPE = np.int64):
         self.FPTYPE = FPTYPE
         self.method = method
         self.range = 2 ** bits #The range of the number (ie max)
@@ -89,12 +87,19 @@ class fixpoint(object):
         self.data = np.clip(self.data, self.min, self.max)
 
     def from_float(self, x): #take in float values
-        if(self.method =="round"): #if we're rounding off decimal values
+        
+        if(self.method =="ROUND"): #if we're rounding off decimal values bankers style
             self.data = np.clip(np.round(x * self.scale + self.offset).astype(self.FPTYPE),
                             self.min, self.max)
-        elif(self.method =="truncate"): #if we're truncating off decimal
+        elif(self.method =="TRUNCATE"): #if we're truncating off decimal
             self.data = np.clip(np.trunc(x * self.scale + self.offset).astype(self.FPTYPE),
                             self.min, self.max)
+        elif(self.method == "ROUND_UP"): #round to decimal as round up - much slower but only option now.
+            self.data = np.clip(self.__rounder__(x * self.scale + self.offset,"ROUND_UP").astype(self.FPTYPE),
+                               self.min,self.max)
+        elif(self.method == "ROUND_DOWN"): #round to decimal as round up - much slower but only option now.
+            self.data = np.clip(self.__rounder__(x * self.scale + self.offset,"ROUND_DOWN").astype(self.FPTYPE),
+                               self.min,self.max)
             
     def to_float(self): #for plotting etc
         return (self.data.astype(np.float) - self.offset) / self.scale
@@ -160,8 +165,12 @@ class fixpoint(object):
         return result
     
     def __rshift__(self,steps):#slicing and right shifting technique - allows for rounding
-        if(self.method == "round"):
+        if(self.method == "ROUND"):
             self.data = np.round(self.data/(2**steps)).astype(self.FPTYPE)
+        elif(self.method =="ROUND_UP"):
+            self.data = self.__rounder__(self.data/(2**steps)).astype(self.FPTYPE)
+        elif(self.method == "ROUND_DOWN"):
+            self.data = self.__rounder__(self.data/(2**steps)).astype(self.FPTYPE)
         else:    
             self.data >>= steps
         return self
@@ -175,12 +184,25 @@ class fixpoint(object):
         tmpfxpt.data = self.data.copy()
         return tmpfxpt
     
+    def __rounder__(self,array,method='ROUND_UP'):
+        f,w = np.modf(array)
+        retarray=array.copy()
+        if(method=="ROUND_UP"):
+            indup = np.argwhere(f>=0.5)
+            inddown = np.argwhere(f<0.5)
+        elif(method =="ROUND_DOWN"):
+            indup = np.argwhere(f>0.5)
+            inddown = np.argwhere(f<=0.5)
+        retarray[indup] = np.ceil(array[indup])
+        retarray[inddown] = np.floor(array[inddown])
+        return retarray
+    
     __str__ = __repr__
 
 class cfixpoint(object):
     """Fixed-point container for complex values."""
     def __init__(self, bits=None, fraction=None, min_int=None, max_int=None, unsigned=False,
-                 offset = 0.0,method = "round",real=None, imag=None):
+                 offset = 0.0,method = "ROUND",real=None, imag=None):
         
         self.offset = offset
         self.method = method
