@@ -2,7 +2,7 @@
 """
 Created on Tue May 29 13:45:20 2018
 
-@author: Talon Myburgh
+@author: talonmyburgh
 """
 
 """The hope here is to develope a fixed point array set to test a python-based 
@@ -185,7 +185,7 @@ class fixpoint(object):
         return tmpfxpt
     
     def __rounder__(self,array,method='ROUND_UP'):
-        f,w = np.modf(array)
+        f = np.modf(array)[0]
         retarray=array.copy()
         if(method=="ROUND_UP"):
             indup = np.argwhere(f>=0.5)
@@ -332,9 +332,6 @@ class cfixpoint(object):
         self.real << steps
         self.imag << steps
         return self
-        
-    def complex_randn(*args):
-        return np.random.randn(*args) + 1.0j * np.random.randn(*args)
     
     def copy(self): #method for making a copy of fixpoint type (else get referencing issues)
         tmpcfxpt = cfixpoint(real = self.real.copy(),imag=self.imag.copy())

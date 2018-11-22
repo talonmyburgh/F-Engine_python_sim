@@ -2,7 +2,7 @@
 """
 Created on Thu Aug 16 16:13:40 2018
 
-@author: User
+@author: talonmyburgh
 """
 import numpy as np
 from fixpoint import fixpoint, cfixpoint
@@ -133,7 +133,6 @@ class FixPFB(object):
             X.bits = self.bits_out
             X.fraction = self.bits_out
             X.normalise()
-            print(X.data.size)
             
             self.reg_real.data = np.column_stack((x.real.data,self.reg_real.data))[:,:-1]
             self.reg_imag.data = np.column_stack((x.imag.data,self.reg_imag.data))[:,:-1]     #push and pop from FIR register array

@@ -2,7 +2,7 @@
 """
 Created on Thu Aug 16 15:21:43 2018
 
-@author: User
+@author: talonmyburgh
 """
 import numpy as np
 
@@ -108,6 +108,7 @@ class FloatPFB(object):
                 self.staged = 2**staged
             else:
                 self.staged = staged
+                
             if(datasrc is not None and type(datasrc)==str):             #if input data file is specified
                 self.inputdatadir = datasrc
                 self.outputdatadir = datasrc[:-4]+"out.npy"
@@ -190,11 +191,11 @@ class FloatPFB(object):
             elif(self.inputdata is None):
                 raise ValueError ("No input data for PFB specified.")
 
-            size = self.inputdata.size                          #get length of data stream
-            stages = size//self.N                               #how many cycles of commutator
-            X = np.zeros([self.N,stages],dtype = np.complex)    #will be tapsize x stage
+            size = self.inputdata.size                              #get length of data stream
+            stages = size//self.N                                   #how many cycles of commutator
+            X = np.zeros([self.N,stages],dtype = np.complex)        #will be tapsize x stage
             
-            for i in range(0,stages):                           #for each stage, populate all firs, and run FFT once
+            for i in range(0,stages):                               #for each stage, populate all firs, and run FFT once
                 if(i ==0):
                     X[:,i] = iterfft_natural_in_DIT(self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),self.twids,self.staged)
                 else:
