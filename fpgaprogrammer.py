@@ -4,9 +4,10 @@ import casperfpga
 import pickle
 
 ##########FPGA setup###########
-fpga =  casperfpga.CasperFpga('192.168.14.94')
+fpga =  casperfpga.CasperFpga('192.168.14.79')
 fpga.upload_to_ram_and_program('pfb_test.fpg')
 fpga.registers.fft_shift.write(reg=0)
+fpga.registers.control.write(src_mux=1)
 
 #######Sort Data placement#####
 data = np.load('impulsefpgainput.npy')
@@ -26,14 +27,14 @@ while processing:
     valid=fpga.registers.status.read()['data']['valid_count']
     print("Valid=",valid)
     if(valid!=0):
-        fpga.registers.din0.write(reg = data[v])
-        fpga.registers.din1.write(reg = data[v+1])
-        fpga.registers.din2.write(reg = data[v+2])
-        fpga.registers.din3.write(reg = data[v+3])
-        fpga.registers.din4.write(reg = data[v+4])
-        fpga.registers.din5.write(reg = data[v+5])
-        fpga.registers.din6.write(reg = data[v+6])
-        fpga.registers.din7.write(reg = data[v+7])
+        fpga.registers.din_10_0_0.write(reg = data[v])
+        fpga.registers.din_10_0_1.write(reg = data[v+1])
+        fpga.registers.din_10_0_2.write(reg = data[v+2])
+        fpga.registers.din_10_0_3.write(reg = data[v+3])
+        fpga.registers.din_10_0_4.write(reg = data[v+4])
+        fpga.registers.din_10_0_5.write(reg = data[v+5])
+        fpga.registers.din_10_0_6.write(reg = data[v+6])
+        fpga.registers.din_10_0_7.write(reg = data[v+7])
         fpga.registers.control.write(en=1)          #process data.
 
     else:
@@ -49,14 +50,14 @@ j=0
 while capturing:
     print(j)
     fpga.registers.control.write(en=0)
-    reals = np.array([fpga.registers.real0.read()['data']['reg'],
-                      fpga.registers.real1.read()['data']['reg'],
-                      fpga.registers.real2.read()['data']['reg'],
-                      fpga.registers.real3.read()['data']['reg']],dtype = np.float64)
-    imags = np.array([fpga.registers.imag0.read()['data']['reg'],
-                      fpga.registers.imag1.read()['data']['reg'],
-                      fpga.registers.imag2.read()['data']['reg'],
-                      fpga.registers.imag3.read()['data']['reg']],dtype = np.float64)
+    reals = np.array([fpga.registers.real_18_0_0.read()['data']['reg'],
+                      fpga.registers.real_18_0_1.read()['data']['reg'],
+                      fpga.registers.real_18_0_2.read()['data']['reg'],
+                      fpga.registers.real_18_0_3.read()['data']['reg']],dtype = np.float64)
+    imags = np.array([fpga.registers.imag_18_0_0.read()['data']['reg'],
+                      fpga.registers.imag_18_0_1.read()['data']['reg'],
+                      fpga.registers.imag_18_0_2.read()['data']['reg'],
+                      fpga.registers.imag_18_0_3.read()['data']['reg']],dtype = np.float64)
     outputdict["read_"+str(j)] = {
             "valid_count":fpga.registers.status.read()['data']['valid_count'],
             "of_count":fpga.registers.status.read()['data']['of_count'],
