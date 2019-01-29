@@ -247,7 +247,7 @@ class FixPFB(object):
                 self.G_k = self._pow(self.G_k)
                 self.H_k = self._pow(self.H_k)
             else:
-                self.X_k = self._pow(X)
+                self.X_k = X
             
             if(self.inputdatadir is not None):             
                 if(self.dual): 

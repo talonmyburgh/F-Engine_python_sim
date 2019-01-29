@@ -13,29 +13,26 @@ bits_in = 9
 method = "ROUND"
 taps = 16
 point = 2048 #2k
-N=2048*taps*2
+N=2048*taps*10
 k=np.arange(N)
 #
-rect = np.zeros(N,dtype=np.float64)
-for i in range(N):
-    rect[(i*point)+70:(i*point)+85] = 0.25
-
-shiftreg = [1,0,1,0,1,0,1,0,1,0,1]
-rectf = cfixpoint(bits_in,bits_in)
-rectf.from_complex(rect)
-pfbf = FixPFB(point,taps,bits_in,bits_out,shiftreg)
-pfbf.run(rectf)
-
-plt.plot(pfbf.X_k.to_float()[:,-1],'k')
+#rect = np.zeros(N,dtype=np.float64)
+#for i in range(N):
+#    rect[(i*point)+70:(i*point)+85] = 0.25
+#
+#shiftreg = [1,0,1,0,1,0,1,0,1,0,1]
+#rectf = cfixpoint(bits_in,bits_in)
+#rectf.from_complex(rect)
+#pfbf = FixPFB(point,taps,bits_in,bits_out,shiftreg)
+#pfbf.run(rectf)
+#
+#plt.plot(pfbf.X_k.to_float()[:,-1],'k')
 #plt.xlim((180,215))
 #plt.ylim((0.000007,0.0000095))
 #plt.xlabel('CHANNELS',fontsize=11.5)
 #plt.ylabel('$|X(k)|^2$',fontsize=11.5)
 #plt.savefig('../snapsf_engine/PFB_threetone/presentation/F_enginesim_img_mix_blips.png', format='png', dpi=1200)
 #plt.show()
-
-
-
 
 
 ####SIGNALS######
@@ -56,15 +53,12 @@ plt.plot(pfbf.X_k.to_float()[:,-1],'k')
 #sig15 = np.cos(32*(2*np.pi/N)*64*14*k)
 #sig16 = np.cos(32*(2*np.pi/N)*64*15*k)
 #
-#impulse = np.zeros(N)
-#slc =  slice(1,N,2048)
-#impulse[slc] = 1
-#
-#fsig = cfixpoint(bits_in,bits_in,method = method)
-#fsig.from_complex(impulse/2.2)
-#
+impulse = np.zeros(N)
+slc =  slice(1,N,2048)
+impulse[slc] = 1/2.2
+
 #np.save('impulsesiminput.npy',fsig.data.real)
-#np.save('impulsefpgainput.npy',fsig.data.real)
+np.save('impulsefpgainput.npy',impulse)
 #shiftreg = [0,0,0,0,0,0,0,0,0,0,0]
 #
 #pfb_fixed_single = FixPFB(point,taps,bits_in,bits_out,shiftreg)
