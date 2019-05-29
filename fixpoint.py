@@ -69,7 +69,7 @@ class fixpoint(object):
         else:
             self.min = 0 if val else - self.range // 2
             self.max = self.range - 1 if val else self.range // 2 - 1
-    
+            
     def __repr__(self): #how things will be shown when using 'print'
         return 'FP real %s (%d, %d), shape %s' % \
                ('unsigned' if self.unsigned else 'signed',
@@ -127,7 +127,7 @@ class fixpoint(object):
         return result
 
     def __add__(self, y):
-        if(self.scale>y.scale or self.scale<y.scale):
+        if(self.scale!=y.scale):
             raise ValueError("Addition performed between two numbers of differing scales!")
             
         res = self.data + y.data
@@ -206,13 +206,14 @@ class cfixpoint(object):
         
         self.offset = offset
         self.method = method
-        
-        if bits: #basically if bits and isn't None
-            self.real = fixpoint(bits, fraction, min_int, max_int, unsigned,offset,method)
-            self.imag = fixpoint(bits, fraction, min_int, max_int, unsigned,offset,method)
-        else:
+        if bits is not None: #basically if bits and isn't None
+            self.real = fixpoint(bits, fraction, min_int, max_int, unsigned, offset, method)
+            self.imag = fixpoint(bits, fraction, min_int, max_int, unsigned, offset, method)
+        elif real is not None:
             self.real = real
             self.imag = imag
+        else:
+            raise ValueError("Must either specify bits/fraction or pass two fixpoint numbers to real/imag.")
 
     @property
     def bits(self):

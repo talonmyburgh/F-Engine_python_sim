@@ -208,8 +208,6 @@ class FloatPFB(object):
             
             if(self.dual and not self.staged):                                 #decide on how to manipulate data
                 self._split(X)
-                self.G_k = self._pow(self.G_k)
-                self.H_k = self._pow(self.H_k)
             elif(not self.dual and self.staged):
                 self.X_k_stgd = X
                 self.X_k = self._pow(X[:,:,-1])
@@ -219,7 +217,7 @@ class FloatPFB(object):
                 self.G_k = self._pow(self.G_k)
                 self.H_k = self._pow(self.H_k)
             else:
-                self.X_k = self._pow(X)
+                self.X_k = X
                     
             if(self.inputdatadir is not None):             
                 if(self.dual): 

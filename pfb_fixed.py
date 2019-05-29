@@ -35,7 +35,7 @@ def make_fix_twiddle(N,bits,fraction,offset=0.0):
     twids.from_complex(np.exp(-2*np.arange(N//2)*np.pi*1j/N))
     return twids
 
-def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,staged=False):       #parse in data,tiddle factors (must be in bit reversed order for natural order in),
+def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,twidbits,staged=False):       #parse in data,tiddle factors (must be in bit reversed order for natural order in),
                                                                                #how many bits fixpoint numbers are, fraction bits they are, offset, and rounding scheme.
     data=DATA.copy()
     N = data.data.shape[0]                                                     #how long is data stream
@@ -60,7 +60,7 @@ def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,staged=False):       #
 
             slc1 = slice(jfirst,jlast+1,1)
             slc2 = slice(jfirst+distance, jlast+1+distance,1)
-            tmp = (W * data[slc2]) >> bits - 1                                 #slice off lower bit growth from multiply
+            tmp = (W * data[slc2]) >> twidbits - 1                                 #slice off lower bit growth from multiply
             tmp.bits =bits                                                     #bits will = 2*bits+1 - hence - (bits+1)
             tmp.fraction=fraction                                              #fraction will = 2*(frac1+frac2) - hence - (bits-1)
             tmp.normalise()
@@ -91,7 +91,7 @@ def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,staged=False):       #
 class FixPFB(object):
         """This function takes point size, how many taps, what percentage of total data to average over,
         what windowing function, whether you're running dual polarisations and staged (which stage) or not"""
-        def __init__(self, N, taps, bits_in, bits_out, shiftreg, unsigned = False,
+        def __init__(self, N, taps, bits_in, bits_out, twidbits, shiftreg, unsigned = False,
                      offset = 0.0, chan_acc = 1, datasrc = None, w = 'hanning',dual = False,staged = False):
             self.N = N                                                         #how many points
             self.chan_acc = chan_acc                                           #what averaging
@@ -103,6 +103,7 @@ class FixPFB(object):
             self.unsigned = unsigned
             self.offset = offset
             self.staged = staged
+            self.twidbits = twidbits
             
             self.reg_real = fixpoint(self.bits_in, self.bits_in,unsigned = self.unsigned,
                                      offset = self.offset, method = "ROUND_UP")
@@ -129,7 +130,7 @@ class FixPFB(object):
             self.window.from_float(WinDic[w](taps))     
             self.X_k = None                                                    #our output
                 
-            self.twids = make_fix_twiddle(self.N,self.bits_out,self.bits_out-1,self.offset)
+            self.twids = make_fix_twiddle(self.N,self.twidbits,self.twidbits-1,self.offset)
             self.twids = bitrevfixarray(self.twids,self.twids.data.size)
             
         """Takes data segment (N long) and appends each value to each fir.
@@ -137,12 +138,12 @@ class FixPFB(object):
         def _FIR(self,x):
             X_real = self.reg_real*self.window
             X_imag = self.reg_imag*self.window
-            X = cfixpoint(real = X_real.sum(axis=1),imag = X_imag.sum(axis =1))
-            X.method = "ROUND_UP"                                              #adjust so that it now uses rounding like in the FFT (unlike FIR)
+            X = cfixpoint(real = X_real.sum(axis=1),imag = X_imag.sum(axis =1))                                            
             X >> (X.bits - self.bits_out)
             X.bits = self.bits_out
             X.fraction = self.bits_out
             X.normalise()
+            X.method = "ROUND"                                                 #adjust so that it now uses FFT rounding scheme
             
             #push and pop from FIR register array
             self.reg_real.data = np.column_stack((x.real.data,self.reg_real.data))[:,:-1]
@@ -217,20 +218,20 @@ class FixPFB(object):
                 for i in range(0,stages):                                      #for each stage, populate all firs, and run FFT once
                     if(i == 0):
                         X[:,i,:] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),
-                        self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,staged=self.staged)
+                        self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,self.twidbits,staged=self.staged)
                     else:
                         X[:,i,:] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]),
-                         self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,staged=self.staged)
+                         self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,self.twidbits,staged=self.staged)
                         
             else:
                 X.from_complex(np.zeros((self.N,stages),dtype = np.complex64)) #will be tapsize x datalen/point
                 for i in range(0,stages):                                      #for each stage, populate all firs, and run FFT once
                     if(i == 0):
                         X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),
-                        self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out)
+                        self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,self.twidbits)
                     else:
                         X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]),
-                         self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out)
+                         self.twids,self.shiftreg.copy(),self.bits_out,self.bits_out,self.twidbits)
                 
                 
             
