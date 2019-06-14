@@ -10,8 +10,8 @@ import numpy as np
 from fixpoint import cfixpoint
 import time
 
-N = 2**15 #32k
-iters = 1 #100k multiplied by the 10 from running individual processes.
+N = 2**16 #32k
+iters = 2 #100k multiplied by the 10 from running individual processes.
 multiple = 92.1 #number of waves per period - purposefully commensurate over 10 x 32k
 #we will generate 10 x 32k signals for multiprocessing before abs and summing and saving
 resultarray = np.zeros((N,10),dtype = np.float64)
@@ -44,8 +44,8 @@ tn9 = ((np.sin(multiple*(2*np.pi*np.arange(8*N,9*N))/N)).astype(np.float64))/20
 tn10 = ((np.sin(multiple*(2*np.pi*np.arange(9*N,10*N))/N)).astype(np.float64))/20
 
 
-shiftreg = [1,1,1,1,0,1,1,1,1,1,0,1,1,1,1]
-fixtwids = make_fix_twiddle(2**15,18,17) #18 bit twiddle factor that uses even rounding
+shiftreg = [1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1]
+fixtwids = make_fix_twiddle(2**16,18,17) #18 bit twiddle factor that uses even rounding
 fixtwids = bitrevfixarray(fixtwids,fixtwids.data.size)
 
 for i in range(iters):
@@ -53,33 +53,22 @@ for i in range(iters):
     processes = []
     
     #This is done so that we re-generate new noise vectors every time
-#    sig1.from_complex(tn1 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    sig2.from_complex(tn2 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    sig3.from_complex(tn3 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    sig4.from_complex(tn4 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    sig5.from_complex(tn5 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    sig6.from_complex(tn6 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    sig7.from_complex(tn7 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    sig8.from_complex(tn8 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    sig9.from_complex(tn9 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    sig10.from_complex(tn10 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
-#    
-    sig1.from_complex(tn1 + ((np.random.rand(N).astype(np.float64)/5000)))
-    sig2.from_complex(tn2 + ((np.random.rand(N).astype(np.float64)/5000)))
-    sig3.from_complex(tn3 + ((np.random.rand(N).astype(np.float64)/5000)))
-    sig4.from_complex(tn4 + ((np.random.rand(N).astype(np.float64)/5000)))
-    sig5.from_complex(tn5 +((np.random.rand(N).astype(np.float64)/5000)))
-    sig6.from_complex(tn6 + ((np.random.rand(N).astype(np.float64)/5000)))
-    sig7.from_complex(tn7 +((np.random.rand(N).astype(np.float64)/5000)))
-    sig8.from_complex(tn8 + ((np.random.rand(N).astype(np.float64)/5000)))
-    sig9.from_complex(tn9 + ((np.random.rand(N).astype(np.float64)/5000)))
-    sig10.from_complex(tn10 +((np.random.rand(N).astype(np.float64)/5000)))
+    sig1.from_complex(tn1 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
+    sig2.from_complex(tn2 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
+    sig3.from_complex(tn3 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
+    sig4.from_complex(tn4 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
+    sig5.from_complex(tn5 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
+    sig6.from_complex(tn6 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
+    sig7.from_complex(tn7 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
+    sig8.from_complex(tn8 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
+    sig9.from_complex(tn9 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
+    sig10.from_complex(tn10 + ((np.random.normal(size=N,scale = 0.3)).astype(np.float64)/5000))
     
     sig = [sig1,sig2,sig3,sig4,sig5,sig6,sig7,sig8,sig9,sig10]
     t = time.time()
     for j in range(10):
         print(j)
-        FFT(j,sig[j],fixtwids,shiftreg.copy(),22,22,22)
+        FFT(j,sig[j],fixtwids,shiftreg.copy(),22,22,18)
         
     print("Time taken: ", time.time()-t)    
     np.save("F_ENGINEdump_"+str(i),np.sum(resultarray,axis=1))

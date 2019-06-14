@@ -5,28 +5,26 @@ Created on Tue May 29 13:45:20 2018
 @author: talonmyburgh
 """
 
-"""The hope here is to develope a fixed point array set to test a python-based 
+"""The hope here is to develop a fixed point array set to test a python-based 
 PFB and compare it with one implemented with CASPER tools"""
 
 ##############################IMPORTS########################################
 import numpy as np
-from collections import Counter
+import numba as nb
 #############################################################################
 class fixpoint(object):
     #takes number bits in full, number that is fractional part, minimum and 
     #maximum number representable, unsigned or signed integer, rounding or 
-    #truncation and offset val
-    def __init__(self,bits,fraction,min_int=None, max_int=None, unsigned=False, offset=0.0, method = "ROUND",FPTYPE = np.int64):
-        self.FPTYPE = FPTYPE
+    #truncation
+    def __init__(self,bits,fraction, min_int=None, max_int=None, unsigned=False, method = "ROUND"):
         self.method = method
         self.range = 2 ** bits #The range of the number (ie max)
         self.scale = 2 ** fraction #The decimal value length
         self.unsigned = unsigned
-        self.__setbnds(min_int,max_int)
+        self.__setbnds__(min_int,max_int)
         self.data = None
-        self.offset = offset
     
-    def __setbnds(self, min_int=None, max_int=None):
+    def __setbnds__(self, min_int=None, max_int=None):
         if min_int is None: # decides minimal value
             self.min = 0 if self.unsigned else - self.range // 2
         else:
@@ -39,13 +37,14 @@ class fixpoint(object):
     @property
     def bits(self): #define bits as a somewhat 'private' property
         return int(np.log2(self.range))
+    
     @bits.setter
     def bits(self,val):
         if(type(val)!=int):
             raise ValueError("'bits' argument must be of type integer")
         else:
             self.range = 2 ** val
-            self.__setbnds()
+            self.__setbnds__()
 
     @property
     def fraction(self): #define frac as a somewhat 'private' property
@@ -70,49 +69,49 @@ class fixpoint(object):
             self.min = 0 if val else - self.range // 2
             self.max = self.range - 1 if val else self.range // 2 - 1
             
+    @property
+    def FPTYPE(self):
+        if(self.unsigned):
+            return np.uint64
+        else:
+            return np.int64
+            
     def __repr__(self): #how things will be shown when using 'print'
         return 'FP real %s (%d, %d), shape %s' % \
                ('unsigned' if self.unsigned else 'signed',
                 self.bits, self.fraction, np.shape(self.data))
                
     def __getitem__(self,key):
-        newfpt = self.copy()
+        newfpt = fixpoint(self.bits,self.fraction,unsigned=self.unsigned,method = self.method)
         newfpt.data = self.data.copy()[key]
         return newfpt
     
     def __setitem__(self,key,val):
-        self.data[key] = val.data
+        self.data[key] = val.data.copy()
     
     def normalise(self): #how to fit all data values within the range specified
         self.data = np.clip(self.data, self.min, self.max)
 
     def from_float(self, x): #take in float values
-        
         if(self.method =="ROUND"): #if we're rounding off decimal values bankers style
-            self.data = np.clip(np.round(x * self.scale + self.offset).astype(self.FPTYPE),
+            self.data = np.clip(np.round(x * self.scale).astype(self.FPTYPE),
                             self.min, self.max)
         elif(self.method =="TRUNCATE"): #if we're truncating off decimal
-            self.data = np.clip(np.trunc(x * self.scale + self.offset).astype(self.FPTYPE),
+            self.data = np.clip(np.trunc(x * self.scale).astype(self.FPTYPE),
                             self.min, self.max)
-        elif(self.method == "ROUND_UP"): #round to decimal as round up - much slower but only option now.
-            self.data = np.clip(self.__rounder__(x * self.scale + self.offset,"ROUND_UP").astype(self.FPTYPE),
+        elif(self.method == "ROUND_INFTY"): #round to decimal as round up - much slower but only option now.
+            self.data = np.clip(self.__roundinfty__(x * self.scale).astype(self.FPTYPE),
                                self.min,self.max)
-        elif(self.method == "ROUND_DOWN"): #round to decimal as round up - much slower but only option now.
-            self.data = np.clip(self.__rounder__(x * self.scale + self.offset,"ROUND_DOWN").astype(self.FPTYPE),
-                               self.min,self.max)
-            
+        else:
+            raise ValueError("No recognisable quantisation method specified")
+        
     def to_float(self): #for plotting etc
-        return (self.data.astype(np.float) - self.offset) / self.scale
-    
-    def counts(self, select=None): #pulls out a set number of values from the start of data array
-                                    #and counts recurring instances of the value
-        select = slice(None) if select is None else select
-        return Counter(self.data[select].flat)
+        return (self.data.astype(self.FPTYPE)) / self.scale
 
     def sum(self, *args, **kwargs): #rewrite the sum method
         res = self.data.sum(*args, **kwargs) #use numpy sum method
         bits = self.bits + int(np.ceil(np.log2(self.data.size / res.size)))
-        result = fixpoint(bits, self.fraction, unsigned=self.unsigned, offset = self.offset, method = self.method)
+        result = fixpoint(bits, self.fraction, unsigned=self.unsigned, method = self.method)
         result.data = res
         result.normalise() #clip and stuff
         return result
@@ -151,15 +150,8 @@ class fixpoint(object):
         result.data = res
         result.normalise()
         return result
- 
-    @staticmethod
-    def concatenate(other,another):
-        tmparray = np.concatenate([other.data,another.data])
-        tmpfpt = fixpoint(other.bits,other.fraction,unsigned = other.unsigned)
-        tmpfpt.data = tmparray
-        return tmpfpt
     
-    def quantise(self, bits, fraction, min_int=None, max_int=None, unsigned=False):
+    def quantise(self, bits, fraction, min_int=None, max_int=None, unsigned=False,method="ROUND"):
         result = fixpoint(bits, fraction, min_int, max_int, unsigned)
         result.from_float(self.to_float())
         return result
@@ -167,12 +159,12 @@ class fixpoint(object):
     def __rshift__(self,steps):#slicing and right shifting technique - allows for rounding
         if(self.method == "ROUND"):
             self.data = np.round(self.data/(2**steps)).astype(self.FPTYPE)
-        elif(self.method =="ROUND_UP"):
-            self.data = self.__rounder__(self.data/(2**steps)).astype(self.FPTYPE)
-        elif(self.method == "ROUND_DOWN"):
-            self.data = self.__rounder__(self.data/(2**steps)).astype(self.FPTYPE)
-        else:    
+        elif(self.method =="ROUND_INFTY"):
+            self.data = self.__roundinfty__(self.data/(2**steps)).astype(self.FPTYPE)
+        elif(self.method=="TRUNCATE"):    
             self.data >>= steps
+        else:
+            raise ValueError("No recognisable quantisation method specified")
         return self
     
     def __lshift__(self,steps):
@@ -180,35 +172,47 @@ class fixpoint(object):
         return self
     
     def copy(self):  #method for making a copy of fixpoint type (else get referencing issues)
-        tmpfxpt=fixpoint(self.bits,self.fraction,unsigned=self.unsigned,offset=self.offset,method = self.method)
+        tmpfxpt=fixpoint(self.bits,self.fraction,unsigned=self.unsigned,method = self.method)
         tmpfxpt.data = self.data.copy()
         return tmpfxpt
     
-    def __rounder__(self,array,method='ROUND_UP'):
-        f = np.modf(array)[0]
-        retarray=array.copy()
-        if(method=="ROUND_UP"):
-            indup = np.argwhere(f>=0.5)
-            inddown = np.argwhere(f<0.5)
-        elif(method =="ROUND_DOWN"):
-            indup = np.argwhere(f>0.5)
-            inddown = np.argwhere(f<=0.5)
-        retarray[indup] = np.ceil(array[indup])
-        retarray[inddown] = np.floor(array[inddown])
-        return retarray
+    @nb.jit
+    def __roundinfty__(self,array):
+        a = array.copy()
+        f=np.modf(a)[0]             #get decimal values from data
+        if (a.ndim == 1):
+            for i in range(len(array)):
+                if((f[i]<0.0 and f[i] <=-0.5) or (f[i]>=0.0 and f[i]<0.5)):
+                    a[i]=np.floor(a[i])
+                else:
+                    a[i]=np.ceil(a[i])
+        elif(a.ndim==2):
+            for i in range(array.shape[0]):
+                for j in range(array.shape[1]):
+                    if((f[i,j]<0.0 and f[i,j] <=-0.5) or (f[i,j]>=0.0 and f[i,j]<0.5)):
+                        a[i,j]=np.floor(a[i,j])
+                    else:
+                        a[i,j]=np.ceil(a[i,j])
+        elif(a.ndim==3):
+            for i in range(array.shape[0]):
+                for j in range(array.shape[1]):
+                    for k in range(array.shape[2]):
+                        if((f[i,j,k]<0.0 and f[i,j,k] <=-0.5) or (f[i,j,k]>=0.0 and f[i,j,k]<0.5)):
+                            a[i,j,k]=np.floor(a[i,j,k])
+                        else:
+                            a[i,j,k]=np.ceil(a[i,j,k])
+        return a
     
     __str__ = __repr__
 
 class cfixpoint(object):
     """Fixed-point container for complex values."""
     def __init__(self, bits=None, fraction=None, min_int=None, max_int=None, unsigned=False,
-                 offset = 0.0,method = "ROUND",real=None, imag=None):
-        
-        self.offset = offset
-        self.method = method
+                 method = "ROUND",real=None, imag=None):
+
         if bits is not None: #basically if bits and isn't None
-            self.real = fixpoint(bits, fraction, min_int, max_int, unsigned, offset, method)
-            self.imag = fixpoint(bits, fraction, min_int, max_int, unsigned, offset, method)
+            self.real = fixpoint(bits, fraction, min_int, max_int, unsigned, method)
+            self.imag = fixpoint(bits, fraction, min_int, max_int, unsigned, method)
         elif real is not None:
             self.real = real
             self.imag = imag
@@ -244,6 +248,11 @@ class cfixpoint(object):
     @property
     def unsigned(self):
         return self.real.min == 0
+    
+    @unsigned.setter
+    def unsigned(self,val):
+        self.real.unsigned=val
+        self.imag.unsigned=val
 
     @property
     def min(self):
@@ -256,6 +265,15 @@ class cfixpoint(object):
     @property
     def data(self):
         return self.real.data + 1j * self.imag.data  
+    
+    @property
+    def method(self):
+        return self.real.method
+    
+    @method.setter
+    def method(self,val):
+        self.real.method=val
+        self.imag.method=val
 
     def __repr__(self):
         return 'FP complex %s (%d, %d), shape %s' % \

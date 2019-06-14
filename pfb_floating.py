@@ -22,8 +22,8 @@ def bit_rev(a, bits):
 #takes an array of length N which must be a power of two
 def bitrevarray(array,N): 
     bits = int(np.log2(N))                                                     #number of bits to repr numbers in array
-    A = np.zeros(N,dtype=np.complex64)
-    a = np.arange(N)
+    A = np.empty(N,dtype=np.complex64)
+    a=np.arange(N)
     A[bit_rev(a,bits)] = array[:]
     return A
 
@@ -90,7 +90,10 @@ class FloatPFB(object):
             self.reg =np.zeros([N,taps])                                       #our fir register size filled with zeros orignally
             self.inputdatadir = None
             self.staged=staged
-                
+            
+            
+            self.X_k=None
+            
             if(datasrc is not None and type(datasrc)==str):                    #if input data file is specified
                 self.inputdatadir = datasrc
                 self.outputdatadir = datasrc[:-4]+"out.npy"
@@ -145,7 +148,7 @@ class FloatPFB(object):
                                                                                #then averaging will be over a % of it.
                 iterr = int(1/self.avg)
                 rng = X.shape[1]//iterr
-                Xt = np.zeros([self.N,iterr],dtype = np.float64)
+                Xt = np.empty([self.N,iterr],dtype = np.float64)
                 for i in range(0,iterr):
                     if(i ==0):
                         Xt[:,i] = np.abs(np.sum(X[:,0:rng],axis=1))**2
@@ -159,7 +162,7 @@ class FloatPFB(object):
                 assert X.shape[1]>self.avg and X.shape[1]%self.avg==0, "Data parsed is not enough to average over"
                 +"or is not multiple of average specified"
                 iterr = X.shape[1]//self.avg
-                Xt = np.zeros([self.N,iterr])
+                Xt = np.empty([self.N,iterr],dtype=np.float64)
                 for i in range(0,iterr):
                     if(i==0):
                         Xt[:,i] = np.abs(np.sum(X[:,0:self.avg],axis=1))**2
@@ -180,7 +183,7 @@ class FloatPFB(object):
             stages = size//self.N                                              #how many cycles of commutator
             
             if(self.staged):                                                   #if storing staged data
-                X = np.zeros((self.N,stages,int(np.log2(self.N))+2),
+                X = np.empty((self.N,stages,int(np.log2(self.N))+2),
                              dtype = np.complex64)  
                                                                                #will be tapsize x datalen/point x stages
                 for i in range(0,stages):                                      #for each stage, populate all firs, and run FFT once
@@ -194,7 +197,7 @@ class FloatPFB(object):
                             self.staged)
                 
             else:                                                              #if storing staged data
-                X = np.zeros((self.N,stages),dtype = np.complex64)
+                X = np.empty((self.N,stages),dtype = np.complex64)
                                                                                #will be tapsize x stages
                 for i in range(0,stages):                                      #for each stage, populate all firs, and run FFT once
                     if(i ==0):
