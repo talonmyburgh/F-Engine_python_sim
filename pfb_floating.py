@@ -84,10 +84,9 @@ class FloatPFB(object):
         """This function takes point size, how many taps, what percentage of total data to average over,
         to get data from a file or not,what windowing function, whether you're running dual polarisations,
         whether you'd like data from a stage, and if so which stage - stage 0 being the data in"""
-        def __init__(self, N, taps, avg = 1, datasrc = None, w = 'hann',dual = False,
+        def __init__(self, N, taps, datasrc = None, w = 'hann',dual = False,
                      staged = False, fwidth=1, chan_acc = False):
-            self.N = N                                                         #how many points
-            self.avg = avg                                                     #what averaging
+            self.N = N                                                         #how many points                                                   #what averaging
             self.dual = dual                                                   #whether you're performing dual polarisations or not
             self.reg =np.zeros([N,taps])                                       #our fir register size filled with zeros orignally
             self.inputdatadir = None
@@ -102,7 +101,7 @@ class FloatPFB(object):
             else:
                 self.inputdata = None
             
-            self.window,self.firsc=coeff_gen(N,taps,w,self.fwidth)             #Get window coefficients and scaling 
+            self.window = coeff_gen(N,taps,w,self.fwidth)[0]                   #Get window coefficients and scaling 
                                                                                #factor to use in FIR registers.
             self.twids = make_twiddle(self.N)
             self.twids = bitrevarray(self.twids, len(self.twids))              #for natural order in FFT
@@ -110,8 +109,8 @@ class FloatPFB(object):
         """Takes data segment (N long) and appends each value to each fir.
         Returns data segment (N long) that is the sum of fircontents*windowcoeffs"""
         def _FIR(self,x):
-            X = np.sum(self.reg*self.window,axis=1) / (2**self.firsc)          #filter and scale
             self.reg = np.column_stack((x,self.reg))[:,:-1]                    #push and pop from FIR register array
+            X = np.sum(self.reg*self.window,axis=1)                            #filter and scale
             return X
         
         """For dual polarisation processing, we need to split the data after
@@ -163,20 +162,20 @@ class FloatPFB(object):
                             self.staged)
                     else:
                         X[:,i,:] = iterfft_natural_in_DIT(self._FIR(
-                                self.inputdata[i*self.N-1:i*self.N+self.N-1]),self.twids,
+                                self.inputdata[i*self.N:i*self.N+self.N]),self.twids,
                             self.staged)
                 
             else:                                                              #if storing staged data
                 X = np.empty((self.N,stages),dtype = np.complex64)
                                                                                #will be tapsize x stages
                 for i in range(0,stages):                                      #for each stage, populate all firs, and run FFT once
-                    if(i ==0):
+                    if(i == 0):
                         X[:,i] = iterfft_natural_in_DIT(self._FIR(
                                 self.inputdata[0:self.N]),
                             self.twids)
                     else:
                         X[:,i] = iterfft_natural_in_DIT(self._FIR(
-                                self.inputdata[i*self.N-1:i*self.N+self.N-1]),
+                                self.inputdata[i*self.N:i*self.N+self.N]),
                             self.twids)
             
             """Decide on how to manipulate and display output data"""

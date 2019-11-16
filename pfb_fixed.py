@@ -41,10 +41,21 @@ def make_fix_twiddle(N,bits,fraction,method="ROUND"):
 """Natural order in DIT FFT that accepts the data, the twiddle factors
 (must be bit reversed), a shift register, the bitwidth and fraction
 bit width to process at, the twiddle factor bits and allows for staging"""
-def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,twidbits,staged=False):
-    
+def iterffft_natural_DIT(DATA,twid,swreg,bits,fraction,twidfrac,staged=False):
+
     data=DATA.copy()
     N = data.data.shape[0]                                                     #how long is data stream
+    
+    if(type(swreg)==int):                                           #if integer is parsed rather than list
+        shiftreg = [int(x) for x in bin(swreg)[2:]]
+        if (len(shiftreg)<int(np.log2(N))):
+            for i in range(int(np.log2(N))-len(shiftreg)):
+                shiftreg.insert(0,0)
+    elif(type(swreg)==list and type(swreg[0])==int):             #if list of integers is parsed
+        shiftreg = swreg
+    else:
+        raise ValueError('Shiftregister must be type int or binary list of ints')
+    
     if(staged):
         stgd_data = DATA.copy()
         stgd_data.from_complex(np.zeros((N,int(np.log2(N))+2),
@@ -67,9 +78,9 @@ def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,twidbits,staged=False)
             slc1 = slice(jfirst,jlast+1,1)
             slc2 = slice(jfirst+distance, jlast+1+distance,1)
             tmp = W * data[slc2]
-            tmp >> twidbits - 1                                                #slice off lower bit growth from multiply
-            tmp.bits =bits                                                     #bits will = 2*bits+1 - hence - (bits+1)
-            tmp.fraction=fraction                                              #fraction will = 2*(frac1+frac2) - hence - (bits-1)
+            tmp >> twidfrac                                                    #slice off lower bit growth from multiply (caused by fraction only)
+            tmp.bits =bits                                                     
+            tmp.fraction=fraction                                              #fraction will = (frac1+frac2) - hence right shift by frac2
             tmp.normalise()
             data[slc2] = data[slc1]-tmp
             data[slc1] = data[slc1]+tmp
@@ -100,46 +111,52 @@ class FixPFB(object):
         the output or not, what windowing function to use, whether you're 
         running dual polarisations, what rounding and overflow scheme to use,
         fwidth and whether to stage."""
-        def __init__(self, N, taps, bits_in, bits_fft, bits_out, twidbits, shiftreg,
-                     bitsofacc=31, unsigned = False,chan_acc =False, datasrc = None,
-                     w = 'hanning',firmethod="ROUND", fftmethod="ROUND",
-                     dual = False, fwidth=1, staged = False):
+        def __init__(self, N, taps, bits_in, frac_in, bits_fft, frac_fft, 
+                     bits_out, frac_out, twidbits, twidfrac, swreg, 
+                     bitsofacc=32, fracofacc=31, unsigned = False, 
+                     chan_acc =False, datasrc = None, w = 'hann',
+                     firmethod="ROUND", fftmethod="ROUND", dual = False,
+                     fwidth=1, staged = False):
             
             """Populate PFB object properties"""
             self.N = N                                                         #how many points
-            self.chan_acc = chan_acc                                           #what averaging
+            self.chan_acc = chan_acc                                           #if summing outputs
             self.dual = dual                                                   #whether you're processing dual polarisations
             self.taps = taps                                                   #how many taps
             self.bitsofacc = bitsofacc                                         #how many bits to grow to in integration
+            self.fracofacc = fracofacc
             self.bits_in = bits_in                                             #input data bitlength
+            self.frac_in = frac_in
             self.bits_fft = bits_fft                                           #fft data bitlength
+            self.frac_fft = frac_fft
             self.bits_out = bits_out                                           #what bitlength out you want
+            self.frac_out = frac_out
             self.fwidth = fwidth                                               #normalising factor for fir window
-            
-            if(type(shiftreg)==int):                                           #if integer is parsed rather than list
-                self.shiftreg = [int(x) for x in bin(shiftreg)[2:]]
+            if(type(swreg)==int):                                           #if integer is parsed rather than list
+                self.shiftreg = [int(x) for x in bin(swreg)[2:]]
                 if (len(self.shiftreg)<int(np.log2(N))):
                     for i in range(int(np.log2(N))-len(self.shiftreg)):
                         self.shiftreg.insert(0,0)
-            elif(type(shiftreg)==list and type(shiftreg[0])==int):             #if list of integers is parsed
-                self.shiftreg = shiftreg
+            elif(type(swreg)==list and type(swreg[0])==int):             #if list of integers is parsed
+                self.shiftreg = swreg
             else:
                 raise ValueError('Shiftregister must be type int or binary list of ints')
                 
             self.unsigned = unsigned                                           #only used if data parsed in is in a file                                          
             self.staged = staged                                               #whether to record fft stages
             self.twidbits = twidbits                                           #how many bits to give twiddle factors
+            self.twidfrac = twidfrac
             self.firmethod=firmethod                                           #rounding scheme in firs
             self.fftmethod=fftmethod                                           #rounding scheme in fft
             
             #Define variables to be used:
-            self.reg_real = fixpoint(self.bits_in, self.bits_in,unsigned = self.unsigned,
+            self.reg_real = fixpoint(self.bits_in, self.frac_in,unsigned = self.unsigned,
                                      method = self.firmethod)
             self.reg_real.from_float(np.zeros([N,taps],dtype = np.int64))      #our fir register size filled with zeros orignally
             self.reg_imag = self.reg_real.copy()
 
             if(datasrc is not None and type(datasrc)==str):                    #if input data file is specified
-                self.inputdata = cfixpoint(self.bits_in, self.bits_in,unsigned = self.unsigned,
+                self.inputdata = cfixpoint(self.bits_in, self.frac_in,unsigned = self.unsigned,
                            method = self.firmethod)
                 self.inputdatadir = datasrc
                 self.outputdatadir = datasrc[:-4]+"out.npy"
@@ -148,32 +165,35 @@ class FixPFB(object):
                 self.inputdatadir = None
             
             #the window coefficients for the fir filter
-            self.window = fixpoint(self.bits_fft, self.bits_fft-1,unsigned = self.unsigned,
+            self.window = fixpoint(self.bits_fft, self.frac_fft,unsigned = self.unsigned,
                                    method = self.firmethod)
             tmpcoeff,self.firsc = coeff_gen(self.N,self.taps,w,self.fwidth)
             self.window.from_float(tmpcoeff)  
             
             #the twiddle factors for the natural input fft
-            self.twids = make_fix_twiddle(self.N,self.twidbits,self.twidbits-1,
+            self.twids = make_fix_twiddle(self.N,self.twidbits,twidfrac,
                                           method=self.fftmethod)
             self.twids = bitrevfixarray(self.twids,self.twids.data.size)
             
         """Takes data segment (N long) and appends each value to each fir.
         Returns data segment (N long) that is the sum of fircontents*window"""
         def _FIR(self,x):
+            #push and pop from FIR register array
+            self.reg_real.data = np.column_stack(
+                    (x.real.data,self.reg_real.data))[:,:-1]
+            self.reg_imag.data = np.column_stack(
+                    (x.imag.data,self.reg_imag.data))[:,:-1]
+            
             X_real = self.reg_real*self.window                                 #compute real and imag products
             X_imag = self.reg_imag*self.window
-            prodgrth = X_real.bits - self.bits_fft  -1                         # -1 since the window coeffs have -1 less fraction
+            prodgrth = X_real.fraction - self.frac_fft                         #-1 since the window coeffs have -1 less fraction
             X = cfixpoint(real = X_real.sum(axis=1),imag = X_imag.sum(axis =1))
             X >> prodgrth +self.firsc                                          #remove growth
             X.bits = self.bits_fft                                             #normalise to correct bit and frac length
-            X.fraction = self.bits_fft
+            X.fraction = self.frac_fft
             X.normalise()
             X.method = self.fftmethod                                          #adjust so that it now uses FFT rounding scheme
             
-            #push and pop from FIR register array
-            self.reg_real.data = np.column_stack((x.real.data,self.reg_real.data))[:,:-1]
-            self.reg_imag.data = np.column_stack((x.imag.data,self.reg_imag.data))[:,:-1]
             return X                                                           #FIR output
         
         """In the event that that dual polarisations have been selected, we need to 
@@ -207,14 +227,14 @@ class FixPFB(object):
                 tmp = X.power()                                                # X times X*
                 pwr = X.copy()
                 pwr.bits = self.bitsofacc
-                pwr.frac=self.bitsofacc
+                pwr.frac=self.fracofacc
                 pwr.normalise()                                                #normalise multiplication
                 pwr.data = np.sum(tmp.data,axis=1)                             #accumulate                                
                 return pwr
             else:                                                              #if no accumulation specified
                 pwr = X.power()
                 pwr.bits = self.bitsofacc
-                pwr.frac=self.bitsofacc
+                pwr.frac=self.fracofacc
                 pwr.normalise()                                                #normalise multiplication
                 return pwr
 
@@ -233,7 +253,7 @@ class FixPFB(object):
             size = self.inputdata.data.shape[0]                                #get length of data stream which should be multiple of N
             data_iter = size//self.N                                              #how many cycles of commutator
             
-            X = cfixpoint(self.bits_fft, self.bits_fft,unsigned = self.unsigned,
+            X = cfixpoint(self.bits_fft, self.frac_fft,unsigned = self.unsigned,
                           method = self.fftmethod)
             
             if(self.staged):                                                   #if all stages need be stored
@@ -243,13 +263,13 @@ class FixPFB(object):
                 for i in range(0,data_iter):                                   #for each data_iter, populate all firs, and run FFT once
                     if(i == 0):
                         X[:,i,:] = iterffft_natural_DIT(self._FIR(self.inputdata[0:self.N]),
-                        self.twids,self.shiftreg.copy(),self.bits_fft,self.bits_fft,
-                        self.twidbits,self.staged)
+                        self.twids,self.shiftreg.copy(),self.bits_fft,self.frac_fft,
+                        self.twidfrac,self.staged)
                     else:
                         X[:,i,:] = iterffft_natural_DIT(
-                                self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]),
+                                self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),
                                 self.twids,self.shiftreg.copy(),self.bits_fft,
-                                self.bits_fft, self.twidbits,self.staged)
+                                self.frac_fft, self.twidfrac, self.staged)
                         
             else:                                                              #if stages don't need to be stored
                 X.from_complex(np.empty((self.N,data_iter),
@@ -257,20 +277,20 @@ class FixPFB(object):
                 for i in range(0,data_iter):                                   #for each stage, populate all firs, and run FFT once
                     if(i == 0):
                         X[:,i] = iterffft_natural_DIT(self._FIR(self.inputdata[0:self.N]),
-                        self.twids,self.shiftreg.copy(),self.bits_fft,self.bits_fft,
-                        self.twidbits,self.staged)
+                        self.twids,self.shiftreg.copy(),self.bits_fft,self.frac_fft,
+                        self.twidfrac, self.staged)
 
                     else:
                         X[:,i] = iterffft_natural_DIT(
-                                self._FIR(self.inputdata[i*self.N-1:i*self.N+self.N-1]),
+                                self._FIR(self.inputdata[i*self.N:i*self.N+self.N]),
                                 self.twids,self.shiftreg.copy(),self.bits_fft,
-                                self.bits_fft, self.twidbits,self.staged)
+                                self.frac_fft, self.twidfrac, self.staged)
                 
             """Requantise if bitsout<bitsfft"""    
             if(self.bits_out<self.bits_fft):                                   
                 X>>(self.bits_fft-self.bits_out)
                 X.bits=self.bits_out
-                X.fraction = self.bits_out
+                X.fraction = self.frac_out
                 X.normalise()
 #            
             """Decide on how to manipulate and display output data"""

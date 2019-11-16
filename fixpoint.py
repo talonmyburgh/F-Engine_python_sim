@@ -191,7 +191,7 @@ class fixpoint(object):
         return self.data*self.data
     
     """This method rounds values in an array to +/- infinity"""
-    @nb.jit(nopython = True)
+    @nb.jit
     def __roundinfty__(self,array):
         a = array.copy()
         f=np.modf(a)[0]                                                        #get decimal values from data

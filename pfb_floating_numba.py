@@ -27,7 +27,7 @@ def bit_rev(a, bits):
     return a_copy
 
 """Takes an array of length N which must be a power of two"""
-@nb.jit(nopython=False)
+@nb.jit()
 def bitrevarray(array,N): 
     bits = int(np.log2(N))                                                     #number of bits to repr numbers in array
     A = np.empty(N,dtype=np.complex64)
@@ -50,7 +50,7 @@ def make_twiddle(N):                                                           #
 
 """Natural order in DIT FFT that accepts the data, the twiddle factors
 (bit reversed) and allows for staging"""
-@nb.jit(nopython=False)
+@nb.jit()
 def iterfft_natural_in_DIT(DATA,twid,staged=False):
     data = np.asarray(DATA,dtype = np.complex64)
     N = data.shape[0]                                                          #how long is data stream
@@ -114,7 +114,7 @@ class FloatPFB(object):
             else:
                 self.inputdata = None
                 
-            self.window,self.firsc=coeff_gen(N,taps,w,self.fwidth)
+            self.window = coeff_gen(N,taps,w,self.fwidth)[0]
                 
             self.twids = make_twiddle(self.N)
             self.twids = bitrevarray(self.twids, len(self.twids))              #for natural order in FFT
@@ -122,7 +122,7 @@ class FloatPFB(object):
         """Takes data segment (N long) and appends each value to each fir.
         Returns data segment (N long) that is the sum of fircontents*window"""
         def _FIR(self,x):
-            X = np.sum(self.reg*self.window,axis=1) / (2**self.firsc)          #filter
+            X = np.sum(self.reg*self.window,axis=1)                            #filter
             self.reg = np.column_stack((x,self.reg))[:,:-1]                    #push and pop from FIR register array
             return X
         
