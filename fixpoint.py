@@ -10,7 +10,7 @@ PFB and compare it with one implemented using the CASPER toolset"""
 
 ##############################IMPORTS########################################
 import numpy as np
-import numba as nb
+# import numba as nb
 #############################################################################
 
 class fixpoint(object):
@@ -191,7 +191,7 @@ class fixpoint(object):
         return self.data*self.data
     
     """This method rounds values in an array to +/- infinity"""
-    @nb.jit
+    # @nb.jit
     def __roundinfty__(self,array):
         a = array.copy()
         f=np.modf(a)[0]                                                        #get decimal values from data

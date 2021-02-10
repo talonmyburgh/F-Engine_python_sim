@@ -1,4 +1,4 @@
-import Base: sum, +, -, *, typemin, typemax 
+import Base: sum, +, -, *, typemin, typemax
 
 struct FixpointScheme 
     bits :: Integer
@@ -33,19 +33,23 @@ end
 struct Fixpoint
     data :: Array{Integer}
     scheme :: FixpointScheme
-    function Fixpoint(data::Array{<:Real}, scheme::FixpointScheme) 
-        prod = data .* scheme.scale;
-        rnd_behav = RoundNearest;
-        if (scheme.undflw_behav == "ROUND_EVEN")
-            rnd_behav = RoundNearest;
-        elseif (scheme.undflw_behav =="ROUND_AWAY")
-            rnd_behav = RoundNearestTiesAway;
-        elseif (scheme.undflw_behav =="TRUNCATE")
-            rnd_behav = RoundToZero;
-        end
-        data = clamp.(round.(Int, prod, rnd_behav),scheme.min,scheme.max);
-        new(data,scheme);
+    function Fixpoint(fx_data::Array{<:Integer}, scheme::FixpointScheme)
+        new(fx_data,scheme);
     end
+end
+
+function fromFloat(fl_data::Array{<:Real}, scheme::FixpointScheme) 
+    prod = fl_data .* scheme.scale;
+    rnd_behav = RoundNearest;
+    if (scheme.undflw_behav == "ROUND_EVEN")
+        rnd_behav = RoundNearest;
+    elseif (scheme.undflw_behav =="ROUND_AWAY")
+        rnd_behav = RoundNearestTiesAway;
+    elseif (scheme.undflw_behav =="TRUNCATE")
+        rnd_behav = RoundToZero;
+    end
+    data = clamp.(round.(Integer,prod, rnd_behav),scheme.min,scheme.max);
+    fx=Fixpoint(data,scheme);
 end
 
 function toFloat(f :: Fixpoint)
