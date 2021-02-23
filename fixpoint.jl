@@ -1,5 +1,9 @@
-import Base: sum, +, -, *, typemin, typemax
+import Base: sum, +, -, *, typemin, typemax, show
+using Printf
 
+#########################################################################################
+# Fixpoint Structures
+#########################################################################################
 """
 ```
 struct FixpointScheme
@@ -66,9 +70,48 @@ struct Fixpoint
     Fixpoint(fx_data::Integer,scheme::FixpointScheme) = new([fx_data],scheme);
 end
 
+"""
+```
+struct CFixpoint
+    real :: Fixpoint
+    imag :: Fixpoint
+```
+CFixpoint is the complex extension of Fixpoint that holds two Fixpoint types (real and imag) as its 
+Real and Imaginary parts.
+
+See also: [`Fixpoint`](@ref)
+"""
+struct CFixpoint
+    real :: Fixpoint
+    imag :: Fixpoint
+    function CFixpoint(real :: Array{<:Integer}, imag :: Array{<:Integer}, scheme :: FixpointScheme)
+        real = Fixpoint(real,scheme);
+        imag = Fixpoint(imag,scheme);
+    end
+    function CFixpoint(real :: Fixpoint, imag :: Fixpoint)
+        if real.scheme != imag.scheme
+            error("Real and Imag Fixpoint values must have the same scheme.");
+        else
+            real = real;
+            imag = imag;
+        end
+    end
+end
+
 #########################################################################################
 # Float parsing funtions
 #########################################################################################
+"""
+```
+fromFloat(fl_data::Real,scheme::FixpointScheme)
+```
+Converts a floating point value to Fixpoint according to the FixpointScheme presented.
+
+See also: [`toFloat`](@ref)
+"""
+function fromFloat(fl_data::Real,scheme::FixpointScheme)
+    return fromFloat([fl_data],scheme);
+end
 """
 ```
 fromFloat(fl_data :: Array{<:Real}, scheme :: FixpointScheme)
@@ -96,7 +139,6 @@ function fromFloat(fl_data::Array{<:Real}, scheme::FixpointScheme)
     else 
         error("No recognisable overflow method specified");
     end
-
     return Fixpoint(data,scheme);
 end
 
@@ -113,9 +155,29 @@ function toFloat(f :: Fixpoint)
     return length(fl_val) == 1 ? fl_val[1] : fl_val;
 end
 
-# function normalise(f :: Fixpoint, min :: Integer, max :: Integer)
+"""
+```
+fromComplex(c_data::Array{<:Complex}, scheme::FixpointScheme)
+```
+Converts a Complex value to CFixpoint according to the FixpointScheme presented.
 
-# end
+See also: [`toComplex`](@ref)
+"""
+function fromComplex(c_data::Union{Array{<:Complex},Complex}, scheme::FixpointScheme)
+    return CFixpoint(fromFloat(real(c_data),scheme), fromFloat(imag(c_data),scheme));
+end
+
+"""
+```
+fromComplex(r_data::Union{Array{<:Real},Real}, i_data::Union{Array{<:Real},Real}, scheme::FixpointScheme)
+```
+Converts a two floating point values to CFixpoint according to the FixpointScheme presented.
+
+See also: [`toComplex`](@ref)
+"""
+function fromComplex(r_data::Union{Array{<:Real},Real}, i_data::Union{Array{<:Real},Real}, scheme::FixpointScheme)
+    return CFixpoint(fromFLoat(r_data,scheme),fromFloat(i_data,scheme));
+end
 
 #######################################################################################
 # Arithmetic functions
@@ -198,8 +260,18 @@ function -(a :: Fixpoint, b :: Fixpoint)
     return Fixpoint(sub_val,scheme);
 end
 
+"""
+```
+power(f :: Fixpoint)
+```
+Returns power of the Fixpoint value given = f.data * f.data.
+"""
+function power(f :: Fixpoint)
+    return f.data .* f.data;
+end
+
 #######################################################################################
-# Misc data handling functions
+# Misc Fixpoint type handling functions
 #######################################################################################
 
 """
@@ -229,4 +301,90 @@ See also: [`clamp`](@ref)
 """
 function clamp_wrap(i :: Integer, min :: Integer, max :: Integer)
     return ((i - min) % (max - min)) + min;
+end
+
+"""
+```
+quantise(fxpt :: Fixpoint, scheme :: FixpointScheme)
+```
+Requantise the data contained in fxpt according to the new scheme provided.
+"""
+function quantise(fxpt :: Fixpoint, scheme :: FixpointScheme)
+    return fromFloat(toFloat(fxpt), scheme);
+end
+
+"""
+```
+copy(f :: Fixpoint)
+```
+Overload copy() function to copy Fixpoint by value as opposed to reference.
+
+See also: [`copy`](@ref)
+"""
+function copy(f :: Fixpoint)
+    tmpscheme = FixpointScheme(f.scheme.bits, f.scheme.fraction, min_int=f.scheme.min,
+    max_int=f.scheme.max, unsigned=f.scheme.unsigned, ovflw_behav=f.scheme.ovflw_behav,
+    undflw_behav=f.scheme.undflw_behav);
+    return Fixpoint(copy(f.data),tmpscheme);
+end
+
+
+"""
+```
+show(io :: IO, f :: Fixpoint)
+```
+Overload show function for printing out Fixpoint summary.
+See also: [`show`](@ref)
+"""
+function show(io::IO, f :: Fixpoint)
+    @printf(io,"Fixpoint real %s (%d, %d), shape %s", f.scheme.unsigned ? "unsigned" : "signed",f.scheme.bits, f.scheme.fraction, size(f.data));
+end
+
+#######################################################################################
+# Logical operator functions
+#######################################################################################
+"""
+```
+>>(fxpt :: Fixpoint, steps :: Integer)
+```
+Overload >> function for Fixpoint args.
+Apply 'steps' (>=0) right shifts to fxpt. Cannot use >> operator here since we must control rounding.
+
+See also: [`>>`](@ref)
+"""
+function >>(fxpt :: Fixpoint, steps :: Integer)
+    if (steps < 0)
+        error("Integer value for steps must be greater than or equal to zero.");
+    else
+        rnd_behav = RoundNearest;
+        if (scheme.undflw_behav == "ROUND_EVEN")
+            rnd_behav = RoundNearest;
+        elseif (scheme.undflw_behav =="ROUND_AWAY")
+            rnd_behav = RoundNearestTiesAway;
+        elseif (scheme.undflw_behav =="TRUNCATE")
+            rnd_behav = RoundToZero;
+        else
+            error("No recognisable rounding method specified");
+        end
+        fxpt.data = round.(Integer, fxpt.data/(2^steps),rnd_behav);
+    end
+    return fxpt;
+end
+
+"""
+```
+<<(fxpt :: Fixpoint, steps :: Integer)
+```
+Overload << function for Fixpoint args.
+Apply 'steps' (>=0) left shifts to fxpt. Make use of << operator here.
+
+See also: [`<<`](@ref)
+"""
+function <<(fxpt :: Fixpoint, steps :: Integer)
+    if (steps < 0)
+        error("Integer value for steps must be greater than or equal to zero.");
+    else    
+        fxpt.data <<= steps;
+    end
+    return fxpt;
 end
