@@ -218,7 +218,7 @@ See also: [`sum`](@ref)
 function sum(cf :: CFixpoint; dims :: Union{Integer,Colon}=:) :: CFixpoint
     r_sum_val = sum(cf.real,dims=dims);
     i_sum_val = sum(cf.imag,dims=dims);
-    return CFixpoint(r_sum_val,i_sum_val,r_sum_val.scheme);
+    return CFixpoint(r_sum_val,i_sum_val);
 end
 
 """
@@ -255,8 +255,8 @@ function *(a :: CFixpoint, b :: CFixpoint) :: CFixpoint
         y = (a*d)+(b*c);
         return x, y;
     end
-    out_real, out_imag = cmult(a.real, a.imag, b.real, b. imag);
-    return CFixpoint(out_real, out_imag, out_real.scheme); 
+    out_real, out_imag = cmult(a.real, a.imag, b.real, b.imag);
+    return CFixpoint(out_real, out_imag); 
 end
 
 """
@@ -289,7 +289,7 @@ See also: [`+`](@ref)
 function +(a :: CFixpoint, b :: CFixpoint) :: CFixpoint
     r_sum = a.real + b.real;
     i_sum = a.imag + b.imag;
-    return CFixpoint(r_sum, i_sum, r_sum.scheme);
+    return CFixpoint(r_sum, i_sum);
 end
 
 """
@@ -323,7 +323,7 @@ See also: [`-`](@ref)
 function -(a :: CFixpoint, b :: CFixpoint) :: CFixpoint
     r_sub = a.real - b.real;
     i_sub = a.imag - b.imag;
-    return CFixpoint(r_sub, i_sub, r_sub.scheme);
+    return CFixpoint(r_sub, i_sub);
 end
 
 """
@@ -360,6 +360,16 @@ function conj(cf :: CFixpoint) :: CFixpoint
     return CFixpoint(cf.real, i_res);
 end
 
+"""
+```
+conj!(cf :: CFixpoint)
+```
+Returns conjuage of the CFixpoint value given.
+! implies inline operation.
+"""
+function conj(cf :: CFixpoint) :: CFixpoint
+    cf.imag.data = -cf.imag.data;
+end
 #######################################################################################
 # Misc Fixpoint type handling functions
 #######################################################################################
@@ -405,6 +415,16 @@ end
 
 """
 ```
+quantise(cfxpt :: CFixpoint, scheme :: FixpointScheme)
+```
+Requantise the data contained in cfxpt according to the new scheme provided.
+"""
+function quantise(cfxpt :: CFixpoint, scheme :: FixpointScheme)
+    return fromComplex(toComplex(cfxpt),scheme);
+end
+
+"""
+```
 copy(f :: Fixpoint)
 ```
 Overload copy() function to copy Fixpoint by value as opposed to reference.
@@ -418,6 +438,15 @@ function copy(f :: Fixpoint)
     return Fixpoint(copy(f.data),tmpscheme);
 end
 
+"""
+```
+function copy(cf :: CFixpoint)
+```
+Overload copy() function to copy CFixpoint by value as opposed to reference.
+"""
+function copy(cf :: CFixpoint)
+    return CFixpoint(copy(cf.real),copy(cf.imag));
+end
 
 """
 ```
@@ -430,6 +459,16 @@ function show(io::IO, f :: Fixpoint)
     @printf(io,"Fixpoint real %s (%d, %d), shape %s", f.scheme.unsigned ? "unsigned" : "signed",f.scheme.bits, f.scheme.fraction, size(f.data));
 end
 
+"""
+```
+show(io :: IO, f :: Fixpoint)
+```
+Overload show function for printing out Fixpoint summary.
+See also: [`show`](@ref)
+"""
+function show(io::IO, cf :: CFixpoint)
+    @printf(io,"CFixpoint complex %s (%d, %d), shape %s", cf.real.scheme.unsigned ? "unsigned" : "signed",cf.real.scheme.bits, cf.real.scheme.fraction, size(cf.real.data))
+end
 #######################################################################################
 # Logical operator functions
 #######################################################################################
@@ -443,6 +482,7 @@ Apply 'steps' (>=0) right shifts to fxpt. Cannot use >> operator here since we m
 See also: [`>>`](@ref)
 """
 function >>(fxpt :: Fixpoint, steps :: Integer)
+    t_fxpt = copy(fxpt);
     if (steps < 0)
         error("Integer value for steps must be greater than or equal to zero.");
     else
@@ -456,9 +496,24 @@ function >>(fxpt :: Fixpoint, steps :: Integer)
         else
             error("No recognisable rounding method specified");
         end
-        fxpt.data = round.(Integer, fxpt.data/(2^steps),rnd_behav);
+        t_fxpt.data = round.(Integer, t_fxpt.data/(2^steps),rnd_behav);
     end
-    return fxpt;
+    return t_fxpt;
+end
+
+"""
+```
+>>(cfxpt :: CFixpoint, steps :: Integer)
+```
+Overload >> function for CFixpoint args.
+Apply 'steps' (>=0) right shifts to cfxpt. Cannot use >> operator here since we must control rounding.
+
+See also: [`>>`](@ref)
+"""
+function >>(cfxpt :: CFixpoint, steps :: Integer)
+    t_real = cfxpt.real >> steps;
+    t_imag = cfxpt.imag >> steps;
+    return CFixpoint(t_real, t_imag);
 end
 
 """
@@ -466,15 +521,29 @@ end
 <<(fxpt :: Fixpoint, steps :: Integer)
 ```
 Overload << function for Fixpoint args.
-Apply 'steps' (>=0) left shifts to fxpt. Make use of << operator here.
-
+Apply 'steps' (>=0) left shifts to fxpt.
 See also: [`<<`](@ref)
 """
 function <<(fxpt :: Fixpoint, steps :: Integer)
+    t_fxpt = copy(fxpt);
     if (steps < 0)
         error("Integer value for steps must be greater than or equal to zero.");
     else    
-        fxpt.data <<= steps;
+        t_fxpt.data <<= steps;
     end
-    return fxpt;
+    return t_fxpt;
+end
+
+"""
+```
+<<(fxpt :: Fixpoint, steps :: Integer)
+```
+Overload << function for Fixpoint args.
+Apply 'steps' (>=0) left shifts to fxpt.
+See also: [`<<`](@ref)
+"""
+function <<(cfxpt :: CFixpoint, steps :: Integer)
+    t_real = cfxpt.real << steps;
+    t_imag = cfxpt.imag << steps;
+    return CFixpoint(t_real,t_imag);
 end
