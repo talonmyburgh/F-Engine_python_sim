@@ -14,15 +14,12 @@ function bitRev(N::Integer)::Array{Int}
         a_copy .|= (a .& 1);
     end
     a_copy = a_copy .& (N - 1);
-    return a_copy;
+    return a_copy .+ 1;
 end
 
 # Takes an array of length N which must be a power of two
 function bitRevArray(array::Array{<:Complex{<:Real}}, N::Integer)::Array{<:Complex{<:Real}}
-    A = Array{Complex{Real}}(undef, N);
-    rev_a = bitRev(N);
-    A[rev_a .+ 1] .= array;
-    return A;
+    return array[bitRev(N)];
 end
 
 # =============================================================================
@@ -31,30 +28,31 @@ end
 # =============================================================================
 # Generate Twiddle factors
 function makeTwiddle(N::Integer)::Array{<:Complex{<:Real}}
-    i = collect(0:div(N, 2));
+    i = collect(0:div(N, 2)-1);
     twids = exp.(i .* (-2 * pi * (1im / N)));
     return twids;
 end
 
 function natInIterDitFFT(data::Array{<:Complex{<:Real}}, twids::Array{<:Complex{<:Real}}; staged::Bool=false)::Array{<:Complex{<:Real}}
+    data = copy(data);
     N = size(data)[1];
     if staged
-        stdg_data = zeros(Complex64, N, convert(Int64, log2(N)) + 2);
-        stdg_data[:,1] = data[:];
+        stdg_data = zeros(ComplexF64, N, convert(Int64, log2(N)) + 2);
+        stdg_data[:,1] .= data;
     end
     num_of_groups = 1;
-    distance = N // 2;
+    distance = div(N,2);
     stg = 1;
     while num_of_groups < N
-        for k = 0:num_of_groups - 1
-            jfirst = 2 * k * distance;
+        for k in 0:num_of_groups-1
+            jfirst = (2 * k * distance) + 1;
             jlast = jfirst + distance - 1;
-            W = twids[k + 1];
+            W = twids[k+1];
             slc1 = jfirst:jlast;
-            slc2 = jfirst + distance:jlast + distance;
+            slc2 = slc1 .+ distance;
             tmp = W .* data[slc2];
             data[slc2] .= data[slc1] .- tmp;
-            data[slc1] .= data[scl1] .+ tmp;
+            data[slc1] .= data[slc1] .+ tmp;
         end
         num_of_groups *= 2;
         distance = div(distance, 2);
@@ -62,10 +60,11 @@ function natInIterDitFFT(data::Array{<:Complex{<:Real}}, twids::Array{<:Complex{
             stgd_data[:,stg] = data[:];
         end
         stg += 1;
-        if staged
-            stgd_data[:,end - 1] .= bitRevArray(stdg_data[:,end - 2], N);
-            return stgd_data;
-        else
-            return bitRevArray(data, N);
-        end
     end
+    if staged
+        stgd_data[:,end] .= bitRevArray(stdg_data[:,end - 1], N);
+        return stgd_data;
+    else
+        return bitRevArray(data, N);
+    end
+end
