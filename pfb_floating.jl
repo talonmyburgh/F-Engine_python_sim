@@ -68,3 +68,30 @@ function natInIterDitFFT(data::Array{<:Complex{<:Real}}, twids::Array{<:Complex{
         return bitRevArray(data, N);
     end
 end
+
+# =============================================================================
+# Floating point PFB implementation making use of the natural order in fft
+# like CASPER does. 
+# =============================================================================
+
+struct FloatPFBScheme
+    N           :: Integer;
+    dual        :: Bool;
+    reg         :: Array{ComplexF64};
+    staged      :: Bool;
+    fwidth      :: Float64;
+    chan_acc    :: Bool;
+    window      :: Array{Float64};
+    twids       :: Array{ComplexF64};
+    function FloatPFBScheme(N::Integer, taps::Integer, w::String, dual::Bool, 
+                            staged::Bool, fwidth::Float64, chan_acc::Bool)
+        new(N,
+            dual,
+            zeros(ComplexF64,N,taps),
+            staged,fwidth,
+            chan_acc,
+            coeff_gen(N, taps, win=w, fwidth=fwidth)[1],
+            bitRevArray(makeTwiddle(N),div(N,2))
+        );
+    end
+end

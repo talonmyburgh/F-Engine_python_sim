@@ -1,6 +1,6 @@
 # Binary Output
 using DSP
-function coeff_gen(N :: Integer, taps :: Integer; win :: String = "hanning", fwidth :: Float64 = 1.0) ::Tuple{Array{Float64},Integer}
+function coeff_gen(N::Integer, taps::Integer; win::String = "hanning", fwidth::Float64 = 1.0) ::Tuple{Array{Float64},Integer}
     WinDic = Dict{String,Function}(                                                                     #dictionary of various filter types
     "hanning" => DSP.hanning,
     "hamming" => DSP.hamming,
