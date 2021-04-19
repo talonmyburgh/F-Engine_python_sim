@@ -9,8 +9,8 @@ function coeff_gen(N::Integer, taps::Integer; win::String = "hanning", fwidth::F
     );
     alltaps = N*taps;
     windowval=WinDic[win](alltaps);                                               
-    totalcoeffs = transpose(windowval.*sinc.(fwidth.*(collect(0:alltaps-1)./(N) .- taps/2)));
-    scalefac = nextpow2(maximum(sum(abs.(totalcoeffs),dims=1)));
+    totalcoeffs = reshape(windowval.*sinc.(fwidth.*(collect(0:alltaps-1)./(N) .- taps/2)),N,taps);
+    scalefac = nextpow2(maximum(sum(abs.(totalcoeffs),dims=2)));
     return totalcoeffs, scalefac;
 end
 
