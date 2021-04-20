@@ -83,8 +83,8 @@ struct FloatPFBScheme
     chan_acc    :: Bool;
     window      :: Array{Float64};
     twids       :: Array{ComplexF64};
-    function FloatPFBScheme(N::Integer, taps::Integer, w::String, dual::Bool, 
-                            staged::Bool, fwidth::Float64, chan_acc::Bool)
+    function FloatPFBScheme(N::Integer, taps::Integer; w::String="hanning", dual::Bool=false, 
+                            staged::Bool=false, fwidth::Float64=1.0, chan_acc::Bool=false)
         new(N,
             dual,
             zeros(ComplexF64,N,taps),
@@ -94,4 +94,31 @@ struct FloatPFBScheme
             bitRevArray(makeTwiddle(N),div(N,2))
         );
     end
+end
+
+# =============================================================================
+# FIR: Takes data segment (N long) and appends each value to each fir.
+# Returns data segment (N long) that is the sum of fircontents*windowcoeffs
+# =============================================================================
+function PFBFir(pfbsch::FloatPFBScheme ,x::Array{<:Complex{<:Real}}) :: Array{<:Complex{<:Real}}
+    pfbsch.reg .= hcat(x,pfbsch.reg)[:,1:end-1];
+    X = sum(pfbsch.reg .* pfbsch.window,dims=2);
+    return X;
+end
+
+# =============================================================================
+#For dual polarisation processing, we need to split the data after
+#FFT and return the individual complex spectra
+# =============================================================================
+function SpecSplit(Y_k::Array{<:Complex})::Tuple{Array{<:Complex},Array{<:Complex}}
+    R_k = real.(Y_k);
+    R_kflip = copy(R_k);
+    R_kflip[2:end].=R_kflip[end:-1:2];
+
+    I_k = imag.(Y_k);
+    I_kflip = copy(I_k);
+    I_kflip[2:end].=I_kflip[end:-1:2];
+    G_k = (1/2) .* (R_k .+ im .* I_k .+ R_kflip .- im .* I_kflip);
+    H_k = (1/2im) .* (R_k .+ im .* I_k .- R_kflip .+ im .* I_kflip);
+    return G_k, H_k;
 end
