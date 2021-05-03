@@ -46,91 +46,6 @@ end
 
 """
 ```
-natInIterDitFFT(data::Array{<:Complex{<:Real}}, twids::Array{<:Complex{<:Real}}; staged::Bool=false)::Array{<:Complex{<:Real}}
-```
-FFT: natural data order in, bit reversed twiddle factors, bit reversed order out
-"""
-function natInIterDitFFT(data::Array{<:Complex{<:Real}}, twids::Array{<:Complex{<:Real}}; staged::Bool=false)::Array{<:Complex{<:Real}}
-    data = copy(data);
-    N = size(data)[1];
-    if staged
-        stdg_data = zeros(ComplexF64, N, convert(Int64, log2(N)) + 2);
-        stdg_data[:,1] .= data;
-    end
-    num_of_groups = 1;
-    distance = div(N,2);
-    stg = 1;
-    while num_of_groups < N
-        for k in 0:num_of_groups-1
-            jfirst = (2 * k * distance) + 1;
-            jlast = jfirst + distance - 1;
-            W = twids[k+1];
-            slc1 = jfirst:jlast;
-            slc2 = slc1 .+ distance;
-            tmp = W .* data[slc2];
-            data[slc2] .= data[slc1] .- tmp;
-            data[slc1] .= data[slc1] .+ tmp;
-        end
-        num_of_groups *= 2;
-        distance = div(distance, 2);
-        if staged
-            stgd_data[:,stg] = data[:];
-        end
-        stg += 1;
-    end
-    if staged
-        stgd_data[:,end] .= bitRevArray(stdg_data[:,end - 1], N);
-        return stgd_data;
-    else
-        return bitRevArray(data, N);
-    end
-end
-
-"""
-``` 
-natInIterDitFFT(data::Array{<:Complex{<:Real}}, twids::Array{<:Complex{<:Real}}; staged::Bool=false)::Array{<:Complex{<:Real}}
-```
-Overload natInIterDitFFT to accept a PFB scheme rather than twiddle and staged parameters.
-"""
-function natInIterDitFFT(pfbsch::FloatPFBScheme, data::Array{<:Complex{<:Real}}) 
-    :: Array{<:Complex{<:Real}}
-    data = copy(data);
-    N = size(data)[1];
-    if pfbsch.staged
-        stdg_data = zeros(ComplexF64, N, convert(Int64, log2(N)) + 2);
-        stdg_data[:,1] .= data;
-    end
-    num_of_groups = 1;
-    distance = div(pfbsch.N,2);
-    stg = 1;
-    while num_of_groups < pfbsch.N
-        for k in 0:num_of_groups-1
-            jfirst = (2 * k * distance) + 1;
-            jlast = jfirst + distance - 1;
-            W = pfbsch.twids[k+1];
-            slc1 = jfirst:jlast;
-            slc2 = slc1 .+ distance;
-            tmp = W .* data[slc2];
-            data[slc2] .= data[slc1] .- tmp;
-            data[slc1] .= data[slc1] .+ tmp;
-        end
-        num_of_groups *= 2;
-        distance = div(distance, 2);
-        if staged
-            stgd_data[:,stg] = data[:];
-        end
-        stg += 1;
-    end
-    if staged
-        stgd_data[:,end] .= bitRevArray(stdg_data[:,end - 1], pfbsch.N);
-        return stgd_data;
-    else
-        return bitRevArray(data, pfbsch.N);
-    end
-end
-
-"""
-```
 struct FloatPFBScheme
     N           :: Integer;
     dual        :: Bool;
@@ -167,6 +82,91 @@ struct FloatPFBScheme
 end
 
 """
+``` 
+natInIterDitFFT(pfbsch::FloatPFBScheme, data::Array{<:Complex{<:Real}}) :: Array{<:Complex}
+```
+natInIterDitFFT accepts PFB scheme and data.
+"""
+function natInIterDitFFT(pfbsch::FloatPFBScheme, data::Array{<:Complex}) :: Array{<:Complex}
+    data = copy(data);
+    N = size(data)[1];
+    if pfbsch.staged
+        stgd_data = zeros(ComplexF64, N, convert(Int64, log2(N)) + 2);
+        stgd_data[:,1] .= data[:];
+    end
+    num_of_groups = 1;
+    distance = div(pfbsch.N,2);
+    stg = 1;
+    while num_of_groups < pfbsch.N
+        for k in 0:num_of_groups-1
+            jfirst = (2 * k * distance) + 1;
+            jlast = jfirst + distance - 1;
+            W = pfbsch.twids[k+1];
+            slc1 = jfirst:jlast;
+            slc2 = slc1 .+ distance;
+            tmp = W .* data[slc2];
+            data[slc2] .= data[slc1] .- tmp;
+            data[slc1] .= data[slc1] .+ tmp;
+        end
+        num_of_groups *= 2;
+        distance = div(distance, 2);
+        if pfbsch.staged
+            stgd_data[:,stg] = data[:];
+        end
+        stg += 1;
+    end
+    if pfbsch.staged
+        stgd_data[:,end] .= bitRevArray(stgd_data[:,end - 1], pfbsch.N);
+        return stgd_data;
+    else
+        return bitRevArray(data, pfbsch.N);
+    end
+end
+
+"""
+``` 
+natInIterDitFFT(pfbsch::FloatPFBScheme, data::Array{<:Complex{<:Real}}) :: Array{<:Complex}
+```
+Overload natInIterDitFFT to accept a PFB scheme and two real data arrays.
+"""
+function natInIterDitFFT(pfbsch::FloatPFBScheme, data_a::Array{<:Complex{<:Real}}, data_b::Array{<:Complex{<:Real}}) :: Array{<:Complex}
+    data = data_a .+ data_b.*im;                                                            #Merge into a complex array for processing.
+    data = copy(data);
+    N = size(data)[1];
+    if pfbsch.staged
+        stgd_data = zeros(ComplexF64, N, convert(Int64, log2(N)) + 2);
+        stgd_data[:,1] .= data[:];
+    end
+    num_of_groups = 1;
+    distance = div(pfbsch.N,2);
+    stg = 1;
+    while num_of_groups < pfbsch.N
+        for k in 0:num_of_groups-1
+            jfirst = (2 * k * distance) + 1;
+            jlast = jfirst + distance - 1;
+            W = pfbsch.twids[k+1];
+            slc1 = jfirst:jlast;
+            slc2 = slc1 .+ distance;
+            tmp = W .* data[slc2];
+            data[slc2] .= data[slc1] .- tmp;
+            data[slc1] .= data[slc1] .+ tmp;
+        end
+        num_of_groups *= 2;
+        distance = div(distance, 2);
+        if staged
+            stgd_data[:,stg] = data[:];
+        end
+        stg += 1;
+    end
+    if staged
+        stgd_data[:,end] .= bitRevArray(stgd_data[:,end - 1], pfbsch.N);
+        return stgd_data;
+    else
+        return bitRevArray(data, pfbsch.N);
+    end
+end
+
+"""
 ```
 PFBFir(pfbsch::FloatPFBScheme ,x::Array{<:Complex{<:Real}}) :: Array{<:Complex{<:Real}}
 ```
@@ -174,6 +174,7 @@ FIR: Takes data segment (N long) and appends each value to each fir.
 Returns data segment (N long) that is the sum of fircontents*windowcoeffs.
 """
 function PFBFir(pfbsch::FloatPFBScheme ,x::Array{<:Complex{<:Real}}) :: Array{<:Complex{<:Real}}
+    println(size(x));
     pfbsch.reg .= hcat(x,pfbsch.reg)[:,1:end-1];
     X = sum(pfbsch.reg .* pfbsch.window,dims=2);
     return X;
@@ -196,7 +197,7 @@ function SpecSplit(Y_k::Array{<:Complex})::Tuple{Array{<:Complex},Array{<:Comple
     I_kflip[2:end].=I_kflip[end:-1:2];
     G_k = (1/2) .* (R_k .+ im .* I_k .+ R_kflip .- im .* I_kflip);
     H_k = (1/2im) .* (R_k .+ im .* I_k .- R_kflip .+ im .* I_kflip);
-    return G_k, H_k;
+    return (G_k, H_k);
 end
 
 """
@@ -217,49 +218,46 @@ function SpecPow(pfbsch::FloatPFBScheme, X::Array{<:Complex}) :: Array{<:Real}
     end; 
 end;
 
+Base.length(pfbsch::FloatPFBScheme) = 1;
+Base.iterate(pfbsch::FloatPFBScheme) = (pfbsch, nothing);
+Base.iterate(pfbsch::FloatPFBScheme, state::Nothing) = nothing;
+
 """
 ```
 RunPFB(pfbsch::FloatPFBScheme; data::Array{<:Complex}=Nothing) 
     :: Union{Tuple{Array{<:Real},Array{<:Real}},Array{<:Real}}
 ```
-Here one parses a data vector to the PFB to run. Note it must be
-array of length N if a data file was not specified before in the scheme.
+Here one parses a data vector to the PFB to run. Note its length must be a multiple
+of N if a data file was not specified before in the scheme.
 """
-function RunPFB(pfbsch::FloatPFBScheme; data::Array{<:Complex}=Nothing) 
-    :: Union{Tuple{Array{<:Real},Array{<:Real}},Array{<:Real}}
+function RunPFB(pfbsch::FloatPFBScheme; data::Array{<:Complex}=Nothing) :: Union{Tuple{Array{<:Real},Array{<:Real}},Array{<:Real}}
     if isnothing(data)
         #Here we would look to the input file TODO.
     else                                                        #if we are using an input data array
         inputdata = data;
     end;
-        size = length(data);                                    #get length of data stream
-        com_cycles = div(size,pfbsch.N);                        #how many cycles of commutator
-    
+    size = length(data);                                    #get length of data stream
+    com_cycles = div(size,pfbsch.N);                        #how many cycles of commutator
+    data_slc = (1-pfbsch.N):0;                              #start with negative slice to make for loops simpler
     if pfbsch.staged                                            #if storing staged data
         X = Array{ComplexF64}(undef,(pfbsch.N,com_cycles,Int(log2(pfbsch.N)+2)));
                                                                 #will be tapsize x datalen/point x stages
         for i in 1:com_cycles                                   #for each stage, populate all firs, and run FFT once
-            if i == 1
-                X[:,i,:] .= natInIterDitFFT(pfbsch,PFBFir(pfbsch,inputdata[1:pfbsch.N]));
-            else
-                X[:,i,:] .= natInIterDitFFT(pfbsch,PFBFir(pfbsch,inputdata[i*pfbsch.N:i*pfbsch.N+pfbsch.N]));
-            end;
+            X[:,i,:] .= natInIterDitFFT(pfbsch,PFBFir(pfbsch,inputdata[data_slc.+(pfbsch.N*(i))]));
         end;
     else                                                        #if storing staged data
         X = Array{ComplexF64}(undef,(pfbsch.N,com_cycles));     #will be tapsize x stages
         for j in 1:com_cycles                                   #for each stage, populate all firs, and run FFT once
-            if j==1
-                X[:,j] .= natInIterDitFFT(pfbsch,PFBFir(pfbsch,inputdata[1:pfbsch.N]));
-            else
-                X[:,j] .= natInIterDitFFT(pfbsch,PFBFir(pfbsch,inputdata[j*pfbsch.N:j*pfbsch.N+pfbsch.N]));
+            X[:,j] .= natInIterDitFFT(pfbsch,PFBFir(pfbsch,inputdata[data_slc.+(pfbsch.N*(j))]));
         end;
     end;
     if pfbsch.dual & ~pfbsch.staged                             #If dual processing but not staged                      
-        return SpecPow.(pfbsch, SpecSplit(X));
+        return Tuple(SpecPow.(pfbsch, SpecSplit(X)));
     elseif ~pfbsch.dual & pfbsch.staged                         #If single pol processing and staged
         return SpecPow(pfbsch, X[:,:,end]);
-    elseif pfbsch.dual & pfbsch.staged                          #If dual pol and staged
-        return SpecPow.(pfbsch, SpecSplit(X[:,:,end]));
+    elseif pfbsch.dual & pfbsch.staged                          #If dual pol and staged   
+        println(X);                     
+        return Tuple(SpecPow.(pfbsch, SpecSplit(X[:,:,end])));
     else                                                        #If single pol and no staging
         return SpecPow(pfbsch, X);
     end;
