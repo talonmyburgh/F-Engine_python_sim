@@ -191,7 +191,7 @@ class FloatPFB(object):
                 
             elif(self.dual and self.staged):                                   #If dual pol and staged
                 self.X_k_stgd = X
-                self.split(X[:,:,-1])
+                self._split(X[:,:,-1])
                 self.G_k_pow = self._pow(self.G_k)
                 self.H_k_pow = self._pow(self.H_k)
                 

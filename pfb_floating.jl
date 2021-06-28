@@ -96,7 +96,7 @@ function natInIterDitFFT(pfbsch::FloatPFBScheme, data::Array{<:Complex}) :: Arra
     end
     num_of_groups = 1;
     distance = div(pfbsch.N,2);
-    stg = 1;
+    stg = 2;
     while num_of_groups < pfbsch.N
         for k in 0:num_of_groups-1
             jfirst = (2 * k * distance) + 1;
@@ -117,6 +117,7 @@ function natInIterDitFFT(pfbsch::FloatPFBScheme, data::Array{<:Complex}) :: Arra
     end
     if pfbsch.staged
         stgd_data[:,end] .= bitRevArray(stgd_data[:,end - 1], pfbsch.N);
+        # print(stgd_data[:,end])
         return stgd_data;
     else
         return bitRevArray(data, pfbsch.N);
@@ -139,7 +140,7 @@ function natInIterDitFFT(pfbsch::FloatPFBScheme, data_a::Array{<:Complex{<:Real}
     end
     num_of_groups = 1;
     distance = div(pfbsch.N,2);
-    stg = 1;
+    stg = 2;
     while num_of_groups < pfbsch.N
         for k in 0:num_of_groups-1
             jfirst = (2 * k * distance) + 1;
@@ -153,13 +154,14 @@ function natInIterDitFFT(pfbsch::FloatPFBScheme, data_a::Array{<:Complex{<:Real}
         end
         num_of_groups *= 2;
         distance = div(distance, 2);
-        if staged
+        if pfbsch.staged
             stgd_data[:,stg] = data[:];
         end
         stg += 1;
     end
-    if staged
+    if pfbsch.staged
         stgd_data[:,end] .= bitRevArray(stgd_data[:,end - 1], pfbsch.N);
+        # print(stgd_data[:,end])
         return stgd_data;
     else
         return bitRevArray(data, pfbsch.N);
@@ -174,7 +176,6 @@ FIR: Takes data segment (N long) and appends each value to each fir.
 Returns data segment (N long) that is the sum of fircontents*windowcoeffs.
 """
 function PFBFir(pfbsch::FloatPFBScheme ,x::Array{<:Complex{<:Real}}) :: Array{<:Complex{<:Real}}
-    println(size(x));
     pfbsch.reg .= hcat(x,pfbsch.reg)[:,1:end-1];
     X = sum(pfbsch.reg .* pfbsch.window,dims=2);
     return X;
@@ -190,11 +191,12 @@ FFT and return the individual complex spectra.
 function SpecSplit(Y_k::Array{<:Complex})::Tuple{Array{<:Complex},Array{<:Complex}}
     R_k = real.(Y_k);
     R_kflip = copy(R_k);
-    R_kflip[2:end].=R_kflip[end:-1:2];
+    R_kflip[2:end,:].=R_kflip[end:-1:2,:];
 
     I_k = imag.(Y_k);
     I_kflip = copy(I_k);
-    I_kflip[2:end].=I_kflip[end:-1:2];
+    I_kflip[2:end,:].=I_kflip[end:-1:2,:];
+    
     G_k = (1/2) .* (R_k .+ im .* I_k .+ R_kflip .- im .* I_kflip);
     H_k = (1/2im) .* (R_k .+ im .* I_k .- R_kflip .+ im .* I_kflip);
     return (G_k, H_k);
@@ -202,7 +204,7 @@ end
 
 """
 ```
-Pow(pfbsch::FloatPFBScheme, X::Array{<:Complex}) :: Array{<:Real}
+SpecPow(pfbsch::FloatPFBScheme, X::Array{<:Complex}) :: Array{<:Real}
 ```
 Here we take the power spectrum of the outputs. Chan_acc dictates
 if one must sum over all outputs produced.
@@ -230,7 +232,7 @@ RunPFB(pfbsch::FloatPFBScheme; data::Array{<:Complex}=Nothing)
 Here one parses a data vector to the PFB to run. Note its length must be a multiple
 of N if a data file was not specified before in the scheme.
 """
-function RunPFB(pfbsch::FloatPFBScheme; data::Array{<:Complex}=Nothing) :: Union{Tuple{Array{<:Real},Array{<:Real}},Array{<:Real}}
+function RunPFB(pfbsch::FloatPFBScheme; data::Array{<:Complex}=Nothing) #:: Union{Tuple{Array{<:Real},Array{<:Real}},Array{<:Real}}
     if isnothing(data)
         #Here we would look to the input file TODO.
     else                                                        #if we are using an input data array
@@ -252,14 +254,13 @@ function RunPFB(pfbsch::FloatPFBScheme; data::Array{<:Complex}=Nothing) :: Union
         end;
     end;
     if pfbsch.dual & ~pfbsch.staged                             #If dual processing but not staged                      
-        return Tuple(SpecPow.(pfbsch, SpecSplit(X)));
+        # return Tuple(SpecPow.(pfbsch, SpecSplit(X)));
+        return SpecSplit(X);
     elseif ~pfbsch.dual & pfbsch.staged                         #If single pol processing and staged
         return SpecPow(pfbsch, X[:,:,end]);
-    elseif pfbsch.dual & pfbsch.staged                          #If dual pol and staged   
-        println(X);                     
+    elseif pfbsch.dual & pfbsch.staged                          #If dual pol and staged                
         return Tuple(SpecPow.(pfbsch, SpecSplit(X[:,:,end])));
     else                                                        #If single pol and no staging
         return SpecPow(pfbsch, X);
     end;
 end;
-
