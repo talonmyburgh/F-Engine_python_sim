@@ -1,4 +1,4 @@
-import Base: sum, +, -, *, typemin, typemax, show, copy
+import Base: sum, +, -, *, <<, >>, typemin, typemax, show, copy, getindex
 using Printf
 
 #########################################################################################
@@ -468,6 +468,26 @@ See also: [`show`](@ref)
 """
 function show(io::IO, cf :: CFixpoint)
     @printf(io,"CFixpoint complex %s (%d, %d), shape %s", cf.real.scheme.unsigned ? "unsigned" : "signed",cf.real.scheme.bits, cf.real.scheme.fraction, size(cf.real.data))
+end
+
+"""
+```
+getindex(f :: Fixpoint, i :: Int)
+```
+Overload getindex function for accessing data elements out Fixpoint type.
+"""
+function getindex(f :: Fixpoint, i :: Int)
+    return Fixpoint(f.data[i],f.scheme);
+end
+
+"""
+```
+getindex(f :: CFixpoint, i :: Int)
+```
+Overload getindex function for accessing data elements out CFixpoint type.
+"""
+function getindex(cf :: CFixpoint, i :: Int)
+    return CFixpoint(cf.real[i],cf.imag[i]);
 end
 #######################################################################################
 # Logical operator functions
