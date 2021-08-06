@@ -476,7 +476,7 @@ getindex(f :: Fixpoint, i :: Int)
 ```
 Overload getindex function for accessing data elements out Fixpoint type.
 """
-function getindex(f :: Fixpoint, i :: Int)
+function getindex(f :: Fixpoint, i :: Int) :: Fixpoint
     return Fixpoint(f.data[i],f.scheme);
 end
 
@@ -486,9 +486,30 @@ getindex(f :: CFixpoint, i :: Int)
 ```
 Overload getindex function for accessing data elements out CFixpoint type.
 """
-function getindex(cf :: CFixpoint, i :: Int)
+function getindex(cf :: CFixpoint, i :: Int) :: CFixpoint
     return CFixpoint(cf.real[i],cf.imag[i]);
 end
+
+"""
+```
+getindex(f :: Fixpoint, i :: Vector{Int})
+```
+Overload getindex function for accessing data elements out Fixpoint type.
+"""
+function getindex(f :: Fixpoint, i :: Vector{Int}) :: Fixpoint
+    return Fixpoint(f.data[i],f.scheme);
+end
+
+"""
+```
+getindex(f :: CFixpoint, i ::Vector{Int})
+```
+Overload getindex function for accessing data elements out CFixpoint type.
+"""
+function getindex(cf :: CFixpoint, i :: Vector{Int}) :: CFixpoint
+    return CFixpoint(cf.real[i],cf.imag[i]);
+end
+
 #######################################################################################
 # Logical operator functions
 #######################################################################################
