@@ -1,27 +1,6 @@
 include("pfb_coeff_gen.jl");
 """
 ```
-bitRev(N::Integer)::Array{Int}
-```
-Bit reversal algorithms used for the iterative fft's data re-ordering.
-Arranges values from chronological to bit-reversed. 
-"""
-function bitRev(N::Integer)::Array{Int}
-    bits = Int(log2(N));
-    a = collect(0:N - 1);
-    a_copy = copy(a);
-    N = 1 << bits;
-    for i = 1:bits - 1
-        a .>>= 1;
-        a_copy .<<= 1;
-        a_copy .|= (a .& 1);
-    end
-    a_copy = a_copy .& (N - 1);
-    return a_copy .+ 1;
-end
-
-"""
-```
 bitRevArray(array::Array{<:Complex{<:Real}}, N::Integer)::Array{<:Complex{<:Real}}
 ```
 Bit reverses an array's contents according to bitRev of the array's indices.
