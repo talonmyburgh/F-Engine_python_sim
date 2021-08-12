@@ -1,4 +1,5 @@
-import Base: sum, +, -, *, <<, >>, typemin, typemax, show, copy, getindex
+import Base: sum, +, -, *, <<, >>, typemin, typemax, show, copy, getindex,
+        size, zeros
 using Printf
 
 #########################################################################################
@@ -185,6 +186,27 @@ Converts a CFixpoint array to a complex point array according to the CFixpoint's
 """
 function toComplex(cfix :: CFixpoint) :: Array{ComplexF64}
     return toFloat(cfix.real) + toFloat(cfix.imag)*im;
+end
+
+"""
+```
+zeros(fx_scheme :: FixpointScheme, dims :: Union{Integer,Colon})
+```
+Creates a Fixpoint populated with zero values.
+"""
+function zeros(fx_scheme :: FixpointScheme, dims :: Union{Integer,Colon})
+    return fromFloat(zeros(Float64, dims), fx_scheme);
+end
+
+"""
+```
+zeros(cfx_scheme :: CFixpointScheme, dims :: Union{Integer,Colon})
+```
+Creates a Fixpoint populated with zero values.
+"""
+function zeros(fx_scheme :: FixpointScheme, dims :: Union{Integer,Colon})
+    fx_zeros = zeros(fx_scheme,dims);
+    return CFixpoint(fx_zeros, fx_zeros);
 end
 
 #######################################################################################
@@ -447,6 +469,27 @@ Overload copy() function to copy CFixpoint by value as opposed to reference.
 function copy(cf :: CFixpoint)
     return CFixpoint(copy(cf.real),copy(cf.imag));
 end
+
+"""
+```
+function size(f :: Fixpoint)
+```
+Overload size() function to accept Fixpoint.
+"""
+function size(f::Fixpoint)::Integer
+    return size(f.data);
+end
+
+"""
+```
+function size(cf :: CFixpoint)
+```
+Overload size() function to accept CFixpoint.
+"""
+function size(cf::CFixpoint)::Integer
+    return size(cf.real);
+end
+
 
 """
 ```
