@@ -24,6 +24,27 @@ function fixMakeTwiddle(N::Integer, fx_scheme::FixpointScheme)::CFixpoint
     fx_twids = fromComplex(twids,fx_scheme);
     return fx_twids;
 end
+
+"""
+```
+struct FixPFBScheme
+    N           :: Integer;
+    dual        :: Bool;
+    reg         :: Array{ComplexF64};
+    staged      :: Bool;
+    fwidth      :: Float64;
+    chan_acc    :: Bool;
+    window      :: Array{Float64};
+    twids       :: Array{ComplexF64};
+    in_dat_sch  :: FixpointScheme;
+    stg_dat_sch :: FixpointScheme;
+    out_dat_sch :: FixpointScheme;
+    
+```
+Fixed point PFB implementation that makes use of the fixed point natural order in fft
+like CASPER does.
+"""
+
 struct FixPFBScheme
     N           :: Integer;
     dual        :: Bool;
@@ -42,7 +63,7 @@ struct FixPFBScheme
                             staged::Bool=false, fwidth::Float64=1.0, chan_acc::Bool=false)
         new(N,
             dual,
-            zeros(ComplexF64,N,taps),
+            zeros(in_dat_sch,(N,taps),complex=true),
             staged,fwidth,
             chan_acc,
             coeff_gen(N, taps, win=w, fwidth=fwidth)[1],

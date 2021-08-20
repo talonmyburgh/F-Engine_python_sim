@@ -190,23 +190,16 @@ end
 
 """
 ```
-zeros(fx_scheme :: FixpointScheme, dims :: Union{Integer,Colon})
+zeros(fx_scheme :: FixpointScheme, dims :: Tuple; complex :: Bool = false) :: Union{Fixpoint,CFixpoint}
 ```
-Creates a Fixpoint populated with zero values.
+Creates a Fixpoint populated with zero values. Creates a CFixpoint if complex is set to true.
 """
-function zeros(fx_scheme :: FixpointScheme, dims :: Union{Integer,Colon})
-    return fromFloat(zeros(Float64, dims), fx_scheme);
-end
-
-"""
-```
-zeros(cfx_scheme :: CFixpointScheme, dims :: Union{Integer,Colon})
-```
-Creates a Fixpoint populated with zero values.
-"""
-function zeros(fx_scheme :: FixpointScheme, dims :: Union{Integer,Colon})
-    fx_zeros = zeros(fx_scheme,dims);
-    return CFixpoint(fx_zeros, fx_zeros);
+function zeros(fx_scheme :: FixpointScheme, dims :: Tuple; complex :: Bool = false) :: Union{Fixpoint,CFixpoint}
+    if complex
+        return fromComplex(zeros(Float64, dims),zeros(Float64, dims),fx_scheme);
+    else
+        return fromFloat(zeros(Float64, dims), fx_scheme); 
+    end
 end
 
 #######################################################################################
