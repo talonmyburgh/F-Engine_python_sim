@@ -1,3 +1,4 @@
+import Base: conj
 include("pfb_coeff_gen.jl");
 """
 ```
@@ -24,17 +25,6 @@ function makeTwiddle(N::Integer)::Array{<:Complex{<:Real}}
 end
 
 """
-```
-struct FloatPFBScheme
-    N           :: Integer;
-    dual        :: Bool;
-    reg         :: Array{ComplexF64};
-    staged      :: Bool;
-    fwidth      :: Float64;
-    chan_acc    :: Bool;
-    window      :: Array{Float64};
-    twids       :: Array{ComplexF64};
-```
 Floating point PFB implementation making use of the natural order in fft
 like CASPER does.
 """
@@ -96,7 +86,6 @@ function natInIterDitFFT(pfbsch::FloatPFBScheme, data::Array{<:Complex}) :: Arra
     end
     if pfbsch.staged
         stgd_data[:,end] .= bitRevArray(stgd_data[:,end - 1], pfbsch.N);
-        # print(stgd_data[:,end])
         return stgd_data;
     else
         return bitRevArray(data, pfbsch.N);

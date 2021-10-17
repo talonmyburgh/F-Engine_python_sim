@@ -2,15 +2,21 @@ using FFTW;
 using Test;
 using PyPlot;
 pygui(true);
-# Test FFTs
-N=2048;
-k = collect(1:1:N);
-taps=4;
 include("pfb_floating.jl");
 
+# Test bit reversal
+s = collect(0:16-1) .+ im.*collect(0:16-1);
+t = bitRevArray(s,16);
+t = bitRevArray(t,16);
+@test s == t;
+
+# Test FFTs
+N=32;
+k = collect(1:1:N);
+taps=4;
 pfbsch = FloatPFBScheme(N,taps);
-data = cos.(32*(2*pi/N) .*k);
-data = data .+ 1im .* (rand(N).-0.5);
+data = cos.(6*(2*pi/N) .*k);
+data = data .+ 1im .* zeros(N,1);
 ourfft = natInIterDitFFT(pfbsch, data);  
 idealfft = fft(data);
 @test all(abs.(idealfft .- ourfft).<0.0001);
