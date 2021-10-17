@@ -1,9 +1,25 @@
 include("pfb_coeff_gen.jl");
 include("Fixpoint.jl");
+
 """
-```
-fixBitRevArray(array::Array{<:Complex{<:Real}}, N::Integer)::Array{<:Complex{<:Real}}
-```
+Prepares a BitVector for the shiftregister (swreg). It can take in
+a decimal (as an Integer), a hex or oct value, or  a Vector{Bool}. 
+"""
+function shiftregMaker(val :: Union{Integer, Vector{<:Integer}, Vector{Bool}}, N :: Integer) :: BitVector
+    nof_stages = Int(log2(N));
+    if typeof(val) <: Integer
+        return BitVector(reverse(digits(val,base=2,pad=nof_stages)));
+    else
+        val_len = length(val);
+        if val_len <= nof_stages
+            return val_len == nof_stages ? BitVector(val) : BitVector(append!(zeros(nof_stages-val_len),val));
+        else
+            error("Boolean Vector provided has length greater than log2(N)");
+        end
+    end
+end
+
+"""
 Bit reverses an array's contents according to bitRev of the array's indices.
 Takes an array of length N which must be a power of two.
 """
@@ -12,9 +28,6 @@ function fixBitRevArray(array::CFixpoint, N::Integer)::CFixpoint
 end;
 
 """
-```
-fixMakeTwiddle(N::Integer)::CFixpoint
-```
 Generates twiddle factors for the natInIterDitFFT FFT.
 See also: [`fixNatInIterDitFFT`](@ref)   
 """
@@ -26,49 +39,45 @@ function fixMakeTwiddle(N::Integer, fx_scheme::FixpointScheme)::CFixpoint
 end
 
 """
-```
-struct FixPFBScheme
-    N           :: Integer;
-    dual        :: Bool;
-    reg         :: Array{ComplexF64};
-    staged      :: Bool;
-    fwidth      :: Float64;
-    chan_acc    :: Bool;
-    window      :: Array{Float64};
-    twids       :: Array{ComplexF64};
-    in_dat_sch  :: FixpointScheme;
-    stg_dat_sch :: FixpointScheme;
-    out_dat_sch :: FixpointScheme;
-    
-```
 Fixed point PFB implementation that makes use of the fixed point natural order in fft
 like CASPER does.
 """
 
 struct FixPFBScheme
-    N           :: Integer;
-    dual        :: Bool;
-    reg         :: CFixpoint;
-    staged      :: Bool;
-    fwidth      :: Float64;
-    chan_acc    :: Bool;
-    window      :: Fixpoint;
-    twids       :: CFixpoint;
-    in_dat_sch  :: FixpointScheme;
-    stg_dat_sch :: FixpointScheme;
-    out_dat_sch :: FixpointScheme;
-    function FixPFBScheme(N::Integer, taps::Integer, in_dat_sch::FixpointScheme,
-                            stg_dat_sch::FixpointScheme, out_dat_sch::FixpointScheme;
+    N           ::Integer;
+    dual        ::Bool;
+    reg         ::CFixpoint;
+    staged      ::Bool;
+    fwidth      ::Float64;
+    chan_acc    ::Bool;
+    window      ::Fixpoint;
+    twids       ::CFixpoint;
+    swreg       ::BitVector;
+    in_dat_sch  ::FixpointScheme;
+    win_dat_sch ::FixpointScheme;
+    coef_dat_sch::FixpointScheme;
+    stg_dat_sch ::FixpointScheme;
+    out_dat_sch ::FixpointScheme;
+    function FixPFBScheme(N::Integer, taps::Integer, in_dat_sch::FixpointScheme, 
+                            win_dat_sch::FixpointScheme, coef_dat_sch::FixpointScheme, 
+                            stg_dat_sch::FixpointScheme, out_dat_sch::FixpointScheme; 
                             w::String="hanning", dual::Bool=false, 
+                            swreg::Union{Integer, Vector{Bool}, BitVector}=N-1, 
                             staged::Bool=false, fwidth::Float64=1.0, chan_acc::Bool=false)
         new(N,
             dual,
             zeros(in_dat_sch,(N,taps),complex=true),
-            staged,fwidth,
+            staged,
+            fwidth,
             chan_acc,
-            coeff_gen(N, taps, win=w, fwidth=fwidth)[1],
-            bitRevArray(makeTwiddle(N),div(N,2)),
-            in_dat_sch, stg_dat_sch, out_dat_sch
+            fromFloat(coeff_gen(N, taps, win=w, fwidth=fwidth)[1], win_dat_sch),
+            fixBitRevArray(fixMakeTwiddle(N,coef_dat_sch),div(N,2)),
+            shiftregMaker(swreg,N),
+            in_dat_sch, 
+            win_dat_sch,
+            coef_dat_sch, 
+            stg_dat_sch, 
+            out_dat_sch
         );
     end
 end
@@ -80,11 +89,11 @@ fixNatInIterDitFFT(pfbsch::FloatPFBScheme, data::Array{<:Complex{<:Real}}) :: Ar
 natInIterDitFFT accepts PFB scheme and data.
 """
 function fixNatInIterDitFFT(fixpfbsch::FixPFBScheme, c_data::CFixpoint) :: CFixpoint
-    c_data = quantise(c_data,fixpfbsch.stg_dat_sch);
-    N = size(c_data);
+    c_data = quantise(c_data,fixpfbsch.stg_dat_sch); #make it stg_data size, not in_data size
+    N = length(c_data.real.data);
     if fixpfbsch.staged
         stgd_data = zeros(fixpfbsch.stg_dat_sch, N, convert(Int64,log2(N))+2);
-        stgd_data[:,1] .= quantise(c_data,fixpfbsch.stg_dat_sch); #make it std_data size, not in_data size
+        stgd_data[:,1] .= c_data; 
     end
     num_of_groups = 1;
     distance = div(fixpfbsch.N,2);
@@ -96,10 +105,19 @@ function fixNatInIterDitFFT(fixpfbsch::FixPFBScheme, c_data::CFixpoint) :: CFixp
             W = fixpfbsch.twids[k + 1];
             slc1 = jfirst:jlast;
             slc2 = slc1 .+ distance;
-            tmp = W .* c_data[slc2];\
-            c_data[slc2] .= c_data[slc1] .- tmp;
-            c_data[slc1] .= c_data[slc1] .+ tmp;
+            tmp = W * c_data[slc2];
+            tmp = tmp >> (fixpfbsch.coef_dat_sch.fraction);
+            tmp = cast(tmp,fixpfbsch.stg_dat_sch);
+            tmp = normalise(tmp);
+            c_data[slc2] = c_data[slc1] - tmp;
+            c_data[slc1] = c_data[slc1] + tmp;
         end
+        if fixpfbsch.swreg[stg-1]
+            c_data = c_data >> 1;
+        end
+        c_data = cast(c_data,fixpfbsch.stg_dat_sch);
+        c_data = normalise(c_data);
+
         num_of_groups *= 2;
         distance = div(distance, 2);
 
