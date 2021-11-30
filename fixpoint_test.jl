@@ -1,5 +1,6 @@
 using Test
 using Base: abs
+using Random
 include("fixpoint.jl");
 
 #Fixpoint testing. Create our scheme:
@@ -39,6 +40,9 @@ f_rshift = f_val1 >> 1;
 #Test left shifting the vector values
 ideal_lshift = f_val1.data .<< 1;
 f_lshift = f_val1 << 1;
+
+#Test indexing
+f_val1[Array{Int, 2}([2 1 3; 3 1 2])]
 
 @test any(abs.(toFloat(f_add)-ideal_add) .< 0.0001)
 @test any(abs.(toFloat(f_mul)-ideal_mul) .< 0.0001)

@@ -20,10 +20,10 @@ include("pfb_floating.jl");
 # @test all(abs.(flttwids .- toComplex(fixtwids)) .< 0.000001); 
 
 # Test FFTs
-N=1024;
+N=16;
 k = collect(1:1:N);
 taps=4;
-swreg = 1023;
+swreg = 15;
 
 data_sch = FixpointScheme(18,17);
 coeff_sch = FixpointScheme(18,17,ovflw_behav = "SATURATE"); #necessary else twiddle coeff +1 is captured as -0.999
@@ -40,7 +40,13 @@ fltfft = natInIterDitFFT(fltpfbsch,data_fl);
 ourfft_flt = toComplex(ourfft);
 
 @test any(abs.(fltfft./swreg .- ourfft_flt) .< 0.0001);
- 
+
+# Test the Fixpoint PFB
+print(pfbsch.reg)
+val = FixPFBFir(pfbsch,data_fx);
+print(pfbsch.reg)
+
+
 # # # Test Separation
 # # data = zeros(ComplexF64,N);
 # # data[15] = 1.0 + 0.0*im;

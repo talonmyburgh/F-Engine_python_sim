@@ -6,7 +6,7 @@ function coeff_gen(N::Integer, taps::Integer; win::String = "hanning", fwidth::F
 ```
 Generates the FIR coefficients for the prefilter. 
 """
-function coeff_gen(N::Integer, taps::Integer; win::String = "hanning", fwidth::Float64 = 1.0) ::Tuple{Array{Float64},Integer}
+function coeff_gen(N::Integer, taps::Integer; win::String = "hanning", fwidth::Float64 = 1.0) ::Tuple{Array{Float64,2},Integer}
     WinDic = Dict{String,Function}(                                                                     #dictionary of various filter types
     "hanning" => DSP.hanning,
     "hamming" => DSP.hamming,

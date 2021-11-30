@@ -1,23 +1,11 @@
 import Base: sum, +, -, *, <<, >>, typemin, typemax, show, copy, getindex, setindex!,
-        size, zeros
+        size, zeros, hcat, lastindex, axes
 using Printf
 
 #########################################################################################
 # Fixpoint Structures
 #########################################################################################
 """
-```
-struct FixpointScheme
-    bits :: Integer
-    fraction :: Integer
-    min :: Integer
-    max :: Integer
-    unsigned :: Bool
-    range :: Integer
-    scale :: Integer
-    ovflw_behav :: String
-    undflw_behav :: String
-```
 Type which holds information about the Fixpoint value and influences its treatment
 under arithmetic, logical and conversion operations.
 
@@ -54,41 +42,30 @@ struct FixpointScheme
 end
 
 """
-```
-struct Fixpoint
-    data :: Array{Integer}
-    scheme :: FixpointScheme
-```
 Fixpoint type that accepts an integer array or single integer accompanied by a FixpointScheme that
 governs it's handling.
 
 See also: [`FixpointScheme`](@ref)
 """
-struct Fixpoint
-    data :: Array{<:Integer}
+struct Fixpoint{N}
+    data :: Array{<:Integer,N}
     scheme :: FixpointScheme
-    Fixpoint(fx_data::Array{<:Integer}, scheme::FixpointScheme) = new(fx_data,scheme);
-    Fixpoint(fx_data::Integer,scheme::FixpointScheme) = new([fx_data],scheme);
 end
+Fixpoint{1}(fx_data::Integer, scheme) = Fixpoint{1}([fx_data],scheme);
 
 """
-```
-struct CFixpoint
-    real :: Fixpoint
-    imag :: Fixpoint
-```
 CFixpoint is the complex extension of Fixpoint that holds two Fixpoint types (real and imag) as its 
 Real and Imaginary parts.
 
 See also: [`Fixpoint`](@ref)
 """
-struct CFixpoint
-    real :: Fixpoint
-    imag :: Fixpoint
-    function CFixpoint(real :: Array{<:Integer}, imag :: Array{<:Integer}, scheme :: FixpointScheme)
-        return new(Fixpoint(real,scheme),Fixpoint(imag,scheme));
+struct CFixpoint{N}
+    real :: Fixpoint{N}
+    imag :: Fixpoint{N}
+    function CFixpoint{N}(real :: Array{<:Integer,N}, imag :: Array{<:Integer,N}, scheme :: FixpointScheme) where {N}
+        return new(Fixpoint{N}(real,scheme),Fixpoint{N}(imag,scheme));
     end
-    function CFixpoint(real :: Fixpoint, imag :: Fixpoint)
+    function CFixpoint{N}(real :: Fixpoint{N}, imag :: Fixpoint{N}) where {N}
         if real.scheme != imag.scheme
             error("Real and Imag Fixpoint values must have the same scheme.");
         else
@@ -97,29 +74,30 @@ struct CFixpoint
     end
 end
 
+"""
+Make use of Linear indexing rather than cartesian to allow for overloading of array functions
+"""
+Base.IndexStyle(::Fixpoint) = IndexLinear();
+Base.IndexStyle(::CFixpoint) = IndexLinear();
+
+
 #########################################################################################
 # Float parsing funtions
 #########################################################################################
 """
-```
-fromFloat(fl_data::Real,scheme::FixpointScheme)
-```
 Converts a floating point value to Fixpoint according to the FixpointScheme presented.
 
 See also: [`toFloat`](@ref)
 """
-function fromFloat(fl_data::Real,scheme::FixpointScheme) :: Fixpoint
+function fromFloat(fl_data::Real,scheme::FixpointScheme) :: Fixpoint{1}
     return fromFloat([fl_data],scheme);
 end
 """
-```
-fromFloat(fl_data :: Array{<:Real}, scheme :: FixpointScheme)
-```
 Converts a floating point array to Fixpoint according to the FixpointScheme presented.
 
 See also: [`toFloat`](@ref)
 """
-function fromFloat(fl_data::Array{<:Real}, scheme::FixpointScheme) :: Fixpoint
+function fromFloat(fl_data::Array{<:Real,N}, scheme::FixpointScheme) :: Fixpoint{N} where {N}
     prod = fl_data .* scheme.scale;
     rnd_behav = RoundNearest;
     if (scheme.undflw_behav == "ROUND_EVEN")
@@ -138,57 +116,65 @@ function fromFloat(fl_data::Array{<:Real}, scheme::FixpointScheme) :: Fixpoint
     else 
         error("No recognisable overflow method specified");
     end
-    return Fixpoint(data,scheme);
+    return Fixpoint{N}(data,scheme);
 end
 
 """
-```
-toFloat(f :: Fixpoint) :: Array{Float64}
-```
 Converts a Fixpoint array to floating point according to the Fixpoint's FixpointScheme.
 
 See also: [`fromFloat`](@ref)
 """
-function toFloat(f :: Fixpoint) :: Array{Float64}
+function toFloat(f :: Fixpoint{N}) :: Array{Float64,N} where {N}
     fl_val = Float64.(f.data)./f.scheme.scale;
     return fl_val;
 end
 
 """
-```
-fromComplex(c_data::Array{<:Complex}, scheme::FixpointScheme)
-```
 Converts a Complex value to CFixpoint according to the FixpointScheme presented.
 
 See also: [`toComplex`](@ref)
 """
-function fromComplex(c_data::Union{Array{<:Complex},Complex}, scheme::FixpointScheme) :: CFixpoint
-    return CFixpoint(fromFloat(real(c_data),scheme), fromFloat(imag(c_data),scheme));
+function fromComplex(c_data::Complex, scheme::FixpointScheme) :: CFixpoint{1}
+    return CFixpoint{1}(fromFloat(real(c_data),scheme), fromFloat(imag(c_data),scheme));
 end
-
 """
-```
-fromComplex(r_data::Union{Array{<:Real},Real}, i_data::Union{Array{<:Real},Real}, scheme::FixpointScheme)
-```
-Converts a two floating point values to CFixpoint according to the FixpointScheme presented.
+Converts a Complex value to CFixpoint according to the FixpointScheme presented.
 
 See also: [`toComplex`](@ref)
 """
-function fromComplex(r_data::Union{Array{<:Real},Real}, i_data::Union{Array{<:Real},Real}, scheme::FixpointScheme) :: CFixpoint
-    return CFixpoint(fromFloat(r_data,scheme),fromFloat(i_data,scheme));
+function fromComplex(c_data::Array{<:Complex,N}, scheme::FixpointScheme) :: CFixpoint{N} where {N}
+    return CFixpoint{N}(fromFloat(real(c_data),scheme), fromFloat(imag(c_data),scheme));
+end
+
+"""
+Converts two floating point values to CFixpoint according to the FixpointScheme presented.
+
+See also: [`toComplex`](@ref)
+"""
+function fromComplex(r_data::Real, i_data::Real, scheme::FixpointScheme) :: CFixpoint{1}
+    return CFixpoint{1}(fromFloat(r_data,scheme),fromFloat(i_data,scheme));
+end
+
+"""
+Converts two floating point values to CFixpoint according to the FixpointScheme presented.
+
+See also: [`toComplex`](@ref)
+"""
+function fromComplex(r_data::Array{<:Real,N}, i_data::Array{<:Real,N}, scheme::FixpointScheme) :: CFixpoint{N} where {N}
+    return CFixpoint{N}(fromFloat(r_data,scheme),fromFloat(i_data,scheme));
 end
 
 """
 Converts a CFixpoint array to a complex point array according to the CFixpoint's FixpointScheme.
 """
-function toComplex(cfix :: CFixpoint) :: Array{ComplexF64}
+function toComplex(cfix :: CFixpoint{N}) :: Array{ComplexF64,N} where {N}
     return toFloat(cfix.real) + toFloat(cfix.imag)*im;
 end
 
 """
 Creates a Fixpoint populated with zero values. Creates a CFixpoint if complex is set to true.
 """
-function zeros(fx_scheme :: FixpointScheme, dims :: Tuple; complex :: Bool = false) :: Union{Fixpoint,CFixpoint}
+function zeros(fx_scheme :: FixpointScheme, dims :: NTuple{N,Int}; complex :: Bool = false) :: Union{Fixpoint{N},CFixpoint{N}} where{N}
     if complex
         return fromComplex(zeros(Float64, dims),zeros(Float64, dims),fx_scheme);
     else
@@ -199,29 +185,29 @@ end
 """
 Fit all data within the min/max values for Fixpoint
 """
-function normalise(f_val :: Fixpoint) :: Fixpoint
-    return Fixpoint(clamp.(f_val.data,f_val.scheme.min,f_val.scheme.max),f_val.scheme);
+function normalise(f_val :: Fixpoint{N}) :: Fixpoint{N} where {N}
+    return Fixpoint{N}(clamp.(f_val.data,f_val.scheme.min,f_val.scheme.max),f_val.scheme);
 end
 
 """
 Fit all data within the min/max values for CFixpoint
 """
-function normalise(cf_val :: CFixpoint) :: CFixpoint
-    return CFixpoint(normalise(cf_val.real),normalise(cf_val.imag));
+function normalise(cf_val :: CFixpoint{N}) :: CFixpoint{N} where {N}
+    return CFixpoint{N}(normalise(cf_val.real),normalise(cf_val.imag));
 end
 
 """
 Cast Fixpoint type to Fixpoint type of new scheme
 """
-function cast(f_val :: Fixpoint, f_scheme :: FixpointScheme) :: Fixpoint
-    return Fixpoint(f_val.data,f_scheme);
+function cast(f_val :: Fixpoint{N}, f_scheme :: FixpointScheme) :: Fixpoint{N} where {N}
+    return Fixpoint{N}(f_val.data,f_scheme);
 end
 
 """
 Cast CFixpoint type to CFixpoint type of new scheme
 """
-function cast(cf_val :: CFixpoint, f_scheme :: FixpointScheme) :: CFixpoint
-    return CFixpoint(Fixpoint(cf_val.real.data,f_scheme),Fixpoint(cf_val.imag.data,f_scheme));
+function cast(cf_val :: CFixpoint{N}, f_scheme :: FixpointScheme) :: CFixpoint{N} where {N}
+    return CFixpoint{N}(Fixpoint(cf_val.real.data,f_scheme),Fixpoint(cf_val.imag.data,f_scheme));
 end
 
 
@@ -237,13 +223,13 @@ Overload sum function to take Fixpoint type array as argument.
 
 See also: [`sum`](@ref)
 """
-function sum(f :: Fixpoint; dims :: Union{Integer,Colon}=:) :: Fixpoint
+function sum(f :: Fixpoint{N}; dims :: Union{Integer,Colon}=:) :: Fixpoint{N} where {N}
     sum_val = sum(f.data, dims=dims);
     bits = f.scheme.bits + ceil.(Integer,log2.(length(f.data)/length(sum_val)));
     scheme = FixpointScheme(bits, f.scheme.fraction, min_int=f.scheme.min,
     max_int=f.scheme.max, unsigned=f.scheme.unsigned, ovflw_behav=f.scheme.ovflw_behav,
     undflw_behav=f.scheme.undflw_behav);
-    return Fixpoint(sum_val,scheme);
+    return Fixpoint{N}(sum_val,scheme);
 end
 
 """
@@ -253,10 +239,10 @@ sum(cf :: CFixpoint, dims :: Union{Integer,Colon}=:)
 Overload sum function to take CFixpoint type array as argument.
 See also: [`sum`](@ref)
 """
-function sum(cf :: CFixpoint; dims :: Union{Integer,Colon}=:) :: CFixpoint
+function sum(cf :: CFixpoint{N}; dims :: Union{Integer,Colon}=:) :: CFixpoint{N} where {N}
     r_sum_val = sum(cf.real,dims=dims);
     i_sum_val = sum(cf.imag,dims=dims);
-    return CFixpoint(r_sum_val,i_sum_val);
+    return CFixpoint{N}(r_sum_val,i_sum_val);
 end
 
 """
@@ -267,14 +253,14 @@ Overload * function to take Fixpoint type arrays as arguments.
         
 See also: [`*`](@ref)
 """
-function *(a :: Fixpoint, b :: Fixpoint) :: Fixpoint
+function *(a :: Fixpoint{N}, b :: Fixpoint{N}) :: Fixpoint{N} where {N}
     prod_val = a.data .* b.data;
     bits = a.scheme.bits + b.scheme.bits;
     fraction = a.scheme.fraction + b.scheme.fraction;
     unsigned = a.scheme.unsigned & b.scheme.unsigned;
     scheme = FixpointScheme(bits, fraction, unsigned=unsigned, 
     ovflw_behav=a.scheme.ovflw_behav, undflw_behav=a.scheme.undflw_behav);
-    return Fixpoint(prod_val,scheme);
+    return Fixpoint{N}(prod_val,scheme);
 end
 
 """
@@ -285,7 +271,7 @@ Overload * function to take CFixpoint type arrays as arguments.
 
 See also: [`*`](@ref)
 """
-function *(a :: CFixpoint, b :: CFixpoint) :: CFixpoint
+function *(a :: CFixpoint{N}, b :: CFixpoint{N}) :: CFixpoint{N} where {N}
     function cmult(a, b, c, d)
         # Real part x = a*c - b*d
         x = (a*c)-(b*d);
@@ -294,7 +280,7 @@ function *(a :: CFixpoint, b :: CFixpoint) :: CFixpoint
         return x, y;
     end
     out_real, out_imag = cmult(a.real, a.imag, b.real, b.imag);
-    return CFixpoint(out_real, out_imag); 
+    return CFixpoint{N}(out_real, out_imag); 
 end
 
 """
@@ -305,7 +291,7 @@ Overload + function to take Fixpoint type arrays as arguments.
         
 See also: [`+`](@ref)
 """
-function +(a :: Fixpoint, b :: Fixpoint) :: Fixpoint
+function +(a :: Fixpoint{N}, b :: Fixpoint{N}) :: Fixpoint{N} where {N}
     if (a.scheme.scale != b.scheme.scale)
         error("Addition performed between two Fixpoint values of differing scales.");
     end
@@ -314,7 +300,7 @@ function +(a :: Fixpoint, b :: Fixpoint) :: Fixpoint
     unsigned = a.scheme.unsigned & b.scheme.unsigned;
     scheme = FixpointScheme(bits, a.scheme.fraction, unsigned=unsigned, 
     ovflw_behav=a.scheme.ovflw_behav, undflw_behav=a.scheme.undflw_behav);
-    return Fixpoint(add_val,scheme);
+    return Fixpoint{N}(add_val,scheme);
 end
 """
 ```
@@ -324,10 +310,10 @@ Overload + function to take CFixpoint type arrays as arguments.
         
 See also: [`+`](@ref)
 """
-function +(a :: CFixpoint, b :: CFixpoint) :: CFixpoint
+function +(a :: CFixpoint{N}, b :: CFixpoint{N}) :: CFixpoint{N} where {N}
     r_sum = a.real + b.real;
     i_sum = a.imag + b.imag;
-    return CFixpoint(r_sum, i_sum);
+    return CFixpoint{N}(r_sum, i_sum);
 end
 
 """
@@ -338,7 +324,7 @@ Overload - function to take Fixpoint type arrays as arguments.
         
 See also: [`-`](@ref)
 """
-function -(a :: Fixpoint, b :: Fixpoint) :: Fixpoint
+function -(a :: Fixpoint{N}, b :: Fixpoint{N}) :: Fixpoint{N} where {N}
     if (a.scheme.scale != b.scheme.scale)
         error("Subtraction performed between two Fixpoint values of differing scales.");
     end 
@@ -347,7 +333,7 @@ function -(a :: Fixpoint, b :: Fixpoint) :: Fixpoint
     unsigned = a.scheme.unsigned & b.scheme.unsigned;
     scheme = FixpointScheme(bits, a.scheme.fraction, unsigned=unsigned, 
     ovflw_behav=a.scheme.ovflw_behav, undflw_behav=a.scheme.undflw_behav);
-    return Fixpoint(sub_val,scheme);
+    return Fixpoint{N}(sub_val,scheme);
 end
 
 """
@@ -358,10 +344,10 @@ Overload - function to take CFixpoint type arrays as arguments.
         
 See also: [`-`](@ref)
 """
-function -(a :: CFixpoint, b :: CFixpoint) :: CFixpoint
+function -(a :: CFixpoint{N}, b :: CFixpoint{N}) :: CFixpoint{N} where {N}
     r_sub = a.real - b.real;
     i_sub = a.imag - b.imag;
-    return CFixpoint(r_sub, i_sub);
+    return CFixpoint{N}(r_sub, i_sub);
 end
 
 """
@@ -370,7 +356,7 @@ power(f :: Fixpoint)
 ```
 Returns power of the Fixpoint value given = f.data * f.data.
 """
-function power(f :: Fixpoint) :: Array{Integer}
+function power(f :: Fixpoint{N}) :: Array{Integer,N} where {N}
     return f.data .* f.data;
 end
 
@@ -381,7 +367,7 @@ power(cf :: CFixpoint)
 Returns power of the CFixpoint value given = cf * conj(cf).
 See also: [`conj`](@ref)
 """
-function power(cf :: CFixpoint) :: Array{Integer}
+function power(cf :: CFixpoint{N}) :: Array{Integer, N} where {N}
     res = copy(cf) * conj(cf);
     return res.real;
 end
@@ -392,10 +378,10 @@ conj(cf :: CFixpoint)
 ```
 Returns conjuage of the CFixpoint value given.
 """
-function conj(cf :: CFixpoint) :: CFixpoint
+function conj(cf :: CFixpoint{N}) :: CFixpoint{N} where {N}
     i_res = copy(cf.imag);
     i_res.data = - copy(cf.imag.data);
-    return CFixpoint(cf.real, i_res);
+    return CFixpoint{N}(cf.real, i_res);
 end
 
 """
@@ -405,7 +391,7 @@ conj!(cf :: CFixpoint)
 Returns conjuage of the CFixpoint value given.
 ! implies inline operation.
 """
-function conj(cf :: CFixpoint) :: CFixpoint
+function conj(cf :: CFixpoint{N}) :: CFixpoint{N} where {N}
     cf.imag.data = -cf.imag.data;
 end
 #######################################################################################
@@ -420,12 +406,12 @@ An overload of clamp_wrap to take a Fixpoint array argument instead of an Intege
         
 See also: [`clamp_wrap`](@ref)
 """
-function clamp_wrap(f :: Fixpoint, min :: Integer, max :: Integer)
+function clamp_wrap(f :: Fixpoint{N}, min :: Integer, max :: Integer) :: Fixpoint{N} where {N}
     clamp_val = ((f.data .- min) .% (min - max)) .+ min;
     scheme = FixpointScheme(f.scheme.bits,f.scheme.fraction,unsigned=f.scheme.unsigned,
     max_int=max, min_int=min,
     ovflw_behav=f.scheme.ovflw_behav, undflw_behav=f.scheme.undflw_behav);
-    return Fixpoint(clamp_val,scheme);        
+    return Fixpoint{N}(clamp_val,scheme);        
 end
 
 """
@@ -444,14 +430,14 @@ end
 """
 Requantise the data contained in fxpt according to the new scheme provided.
 """
-function quantise(fxpt :: Fixpoint, scheme :: FixpointScheme) :: Fixpoint
+function quantise(fxpt :: Fixpoint{N}, scheme :: FixpointScheme) :: Fixpoint{N} where {N}
     return fromFloat(toFloat(fxpt), scheme);
 end
 
 """
 Requantise the data contained in cfxpt according to the new scheme provided.
 """
-function quantise(cfxpt :: CFixpoint, scheme :: FixpointScheme) :: CFixpoint
+function quantise(cfxpt :: CFixpoint{N}, scheme :: FixpointScheme) :: CFixpoint{N} where {N}
     return fromComplex(toComplex(cfxpt),scheme);
 end
 
@@ -460,11 +446,11 @@ Overload copy() function to copy Fixpoint by value as opposed to reference.
 
 See also: [`copy`](@ref)
 """
-function copy(f :: Fixpoint)
+function copy(f :: Fixpoint{N}) :: Fixpoint{N} where {N}
     tmpscheme = FixpointScheme(f.scheme.bits, f.scheme.fraction, min_int=f.scheme.min,
     max_int=f.scheme.max, unsigned=f.scheme.unsigned, ovflw_behav=f.scheme.ovflw_behav,
     undflw_behav=f.scheme.undflw_behav);
-    return Fixpoint(copy(f.data),tmpscheme);
+    return Fixpoint{N}(copy(f.data),tmpscheme);
 end
 
 """
@@ -473,8 +459,8 @@ function copy(cf :: CFixpoint)
 ```
 Overload copy() function to copy CFixpoint by value as opposed to reference.
 """
-function copy(cf :: CFixpoint)
-    return CFixpoint(copy(cf.real),copy(cf.imag));
+function copy(cf :: CFixpoint{N}) :: CFixpoint{N} where {N}
+    return CFixpoint{N}(copy(cf.real),copy(cf.imag));
 end
 
 """
@@ -483,7 +469,7 @@ function size(f :: Fixpoint)
 ```
 Overload size() function to accept Fixpoint.
 """
-function size(f::Fixpoint)::Integer
+function size(f::Fixpoint{N}) where {N}
     return size(f.data);
 end
 
@@ -493,7 +479,7 @@ function size(cf :: CFixpoint)
 ```
 Overload size() function to accept CFixpoint.
 """
-function size(cf::CFixpoint)::Integer
+function size(cf::CFixpoint{N}) where {N}
     return size(cf.real);
 end
 
@@ -505,7 +491,7 @@ show(io :: IO, f :: Fixpoint)
 Overload show function for printing out Fixpoint summary.
 See also: [`show`](@ref)
 """
-function show(io::IO, f :: Fixpoint)
+function show(io::IO, f :: Fixpoint{N}) where {N}
     @printf(io,"Fixpoint real %s (%d, %d), shape %s", f.scheme.unsigned ? "unsigned" : "signed",f.scheme.bits, f.scheme.fraction, size(f.data));
 end
 
@@ -516,7 +502,7 @@ show(io :: IO, f :: Fixpoint)
 Overload show function for printing out Fixpoint summary.
 See also: [`show`](@ref)
 """
-function show(io::IO, cf :: CFixpoint)
+function show(io::IO, cf :: CFixpoint{N}) where {N}
     @printf(io,"CFixpoint complex %s (%d, %d), shape %s", cf.real.scheme.unsigned ? "unsigned" : "signed",cf.real.scheme.bits, cf.real.scheme.fraction, size(cf.real.data))
 end
 
@@ -526,8 +512,8 @@ getindex(f :: Fixpoint, i :: Int)
 ```
 Overload getindex function for accessing data elements out Fixpoint type.
 """
-function getindex(f :: Fixpoint, i :: Int) :: Fixpoint
-    return Fixpoint(f.data[i],f.scheme);
+function getindex(f :: Fixpoint{1}, i :: Int) :: Fixpoint{1} 
+    return Fixpoint{1}(getindex(f.data,i),f.scheme);
 end
 
 """
@@ -536,24 +522,38 @@ getindex(cf :: CFixpoint, i :: Int)
 ```
 Overload getindex function for accessing data elements out CFixpoint type.
 """
-function getindex(cf :: CFixpoint, i :: Int) :: CFixpoint
-    return CFixpoint(cf.real[i],cf.imag[i]);
+function getindex(cf :: CFixpoint{1}, i :: Int) :: CFixpoint{1}
+    return CFixpoint{1}(getindex(cf.real,i),getindex(cf.imag,i));
 end
 
 """
 ```
-getindex(f :: Fixpoint, i :: UnitRange{Int64})
+getindex(f :: Fixpoint, I::Vararg{Int, N})
 ```
 Overload getindex function for accessing data elements out Fixpoint type.
 """
-function getindex(f :: Fixpoint, i :: UnitRange{Int64}) :: Fixpoint
-    return Fixpoint(f.data[i],f.scheme);
+function getindex(f :: Fixpoint{N}, I::Vararg{Int, N}) :: Fixpoint{N} where {N}
+    return Fixpoint{N}(f.data[I...],f.scheme);
 end
 
 """
 ```
-getindex(cf :: CFixpoint, i :: UnitRange{Int64})
+getindex(cf :: CFixpoint, I::Vararg{Int, N})
 ```
+Overload getindex function for accessing data elements out CFixpoint type.
+"""
+function getindex(cf :: CFixpoint{N}, I::Vararg{Int, N}) :: CFixpoint{N}  where {N}
+    return CFixpoint{N}(cf.real[I...],cf.imag[I...]);
+end
+
+"""
+Overload getindex function for accessing data elements out Fixpoint type.
+"""
+function getindex(f :: Fixpoint{N}, i :: UnitRange{Int64}) :: Fixpoint{N} where {N}
+    return Fixpoint{N}(f.data[i],f.scheme);
+end
+
+"""
 Overload getindex function for accessing data elements out CFixpoint type.
 """
 function getindex(cf :: CFixpoint, i :: UnitRange{Int64}) :: CFixpoint
@@ -561,90 +561,127 @@ function getindex(cf :: CFixpoint, i :: UnitRange{Int64}) :: CFixpoint
 end
 
 """
-```
-getindex(f :: Fixpoint, i :: Vector{Int})
-```
 Overload getindex function for accessing data elements out Fixpoint type.
 """
-function getindex(f :: Fixpoint, i :: Vector{Int}) :: Fixpoint
-    return Fixpoint(f.data[i],f.scheme);
+function getindex(f :: Fixpoint{1}, i :: Vector{Int}) :: Fixpoint{1}
+    return Fixpoint{1}(f.data[i],f.scheme);
 end
 
 """
-```
-getindex(cf :: CFixpoint, i ::Vector{Int})
-```
 Overload getindex function for accessing data elements out CFixpoint type.
 """
-function getindex(cf :: CFixpoint, i :: Vector{Int}) :: CFixpoint
-    return CFixpoint(cf.real[i],cf.imag[i]);
+function getindex(cf :: CFixpoint{1}, i :: Vector{Int}) :: CFixpoint{1}
+    return CFixpoint{1}(cf.real[i],cf.imag[i]);
 end
 
 """
-```
-setindex!(f :: Fixpoint, i ::Vector{Int})
-```
-Overload setindex function for accessing data elements out Fixpoint type.
-"""
-function setindex!(f :: Fixpoint, val :: Fixpoint, i :: Vector{Int}) :: Nothing
-    f.data[i] = val.data;
-end
-
-"""
-```
-setindex!(cf :: CFixpoint, i ::Vector{Int})
-```
-Overload setindex function for accessing data elements out CFixpoint type.
-"""
-function setindex!(cf :: CFixpoint, val :: CFixpoint, i :: Vector{Int}) :: Nothing
-    cf.real[i] = val.real;
-    cf.imag[i] = val.imag;
-end
-
-"""
-```
-setindex!(f :: Fixpoint, i ::UnitRange{Int})
-```
-Overload setindex function for accessing data elements out Fixpoint type.
-"""
-function setindex!(f :: Fixpoint, val :: Fixpoint, i :: UnitRange{Int}) :: Nothing
-    f.data[i] = val.data;
-    return;
-end
-
-"""
-```
-setindex!(cf :: CFixpoint, i ::UnitRange{Int})
-```
-Overload setindex function for accessing data elements out CFixpoint type.
-"""
-function setindex!(cf :: CFixpoint, val :: CFixpoint, i :: UnitRange{Int}) :: Nothing
-    cf.real[i] = val.real;
-    cf.imag[i] = val.imag;
-    return;
-end
-
-"""
-````
-setindex!(f :: Fixpoint, i :: Int)
-```
 Overload setindex! function for accessing data elements out Fixpoint type.
 """
-function setindex!(f :: Fixpoint, val :: Fixpoint, i :: Int) :: Nothing
-    f.data[i] = val.data[i];
+function setindex!(f :: Fixpoint{N}, val :: Fixpoint{1}, i :: Int) :: Nothing where {N}
+    f.data[i] = val.data;
 end
 
 """
-```
-setindex!(cf :: CFixpoint, i :: Int)
-```
 Overload setindex! function for accessing data elements out CFixpoint type.
 """
-function setindex!(cf :: CFixpoint, val :: CFixpoint, i :: Int) :: CFixpoint
+function setindex!(cf :: CFixpoint{N}, val :: CFixpoint{1}, i :: Int) :: Nothing where {N}
     cf.real[i] = val.real;
     cf.imag[i] = val.imag;
 end
 
+"""
+Overload setindex function for accessing data elements out Fixpoint type.
+"""
+function setindex!(f :: Fixpoint{N}, val :: Fixpoint{M}, I::Vararg{Int,N}) :: Nothing where {N,M}
+    f.data[I] = val.data;
+end
+
+"""
+Overload setindex function for accessing data elements out CFixpoint type.
+"""
+function setindex!(cf :: CFixpoint{N}, val :: CFixpoint{M}, I::Vararg{Int,N}) :: Nothing where {N,M}
+    cf.real[I] = val.real;
+    cf.imag[I] = val.imag;
+end
+
+# """
+# ```
+# setindex!(f :: Fixpoint, i ::UnitRange{Int})
+# ```
+# Overload setindex function for accessing data elements out Fixpoint type.
+# """
+# function setindex!(f :: Fixpoint, val :: Fixpoint, i :: UnitRange{Int}) :: Nothing
+#     f.data[i] = val.data;
+#     return;
+# end
+
+# """
+# ```
+# setindex!(cf :: CFixpoint, i ::UnitRange{Int})
+# ```
+# Overload setindex function for accessing data elements out CFixpoint type.
+# """
+# function setindex!(cf :: CFixpoint, val :: CFixpoint, i :: UnitRange{Int}) :: Nothing
+#     cf.real[i] = val.real;
+#     cf.imag[i] = val.imag;
+#     return;
+# end
+
+
+
+# """
+# Overload lastindex function for Fixpoint functions
+# """
+# function lastindex(fx::Fixpoint) :: Integer
+#     return lastindex(fx.data);
+# end
+
+# """
+# Overload lastindex function for CFixpoint functions
+# """
+# function lastindex(cfx::CFixpoint) :: Integer
+#     return lastindex(cfx.real.data);
+# end
+
+# """
+# Overload axes function for Fixpoint function
+# """
+# function axes(fx  :: Fixpoint, i :: Integer) :: AbstractUnitRange{<:Integer}
+#     return axes(fx.data, i);
+# end
+
+# """
+# Overload axes function for CFixpoint function
+# """
+# function axes(cfx  :: CFixpoint, i :: Integer) :: AbstractUnitRange{<:Integer}
+#     return axes(cfx.real.data, i);
+# end
+
+"""
+Overload hcat function to handle horizontal concatenation of Fixpoint types.
+Requires that schemes match.
+"""
+function hcat(f_1 :: Fixpoint{N}, f_2 :: Fixpoint{N}) :: Fixpoint{N} where {N}
+    #Check schemes match:
+    if f_1.scheme == f_2.scheme
+        return Fixpoint{N}(hcat(f_1.data,f_2.data),f_1.scheme);
+    else
+        error("Fixpoint args don't share the same scheme.");
+    end
+end
+
+"""
+Overload hcat function to handle horizontal concatenation of CFixpoint types.
+Requires that schemes match.
+"""
+function hcat(cf_1 :: CFixpoint{N}, cf_2 :: CFixpoint{N}) :: CFixpoint{N} where {N}
+    #Check real schemes match - imag will match:
+    if cf_1.real.scheme == cf_2.real.scheme
+        return CFixpoint{N}(hcat(cf_1.real,cf_2.real), hcat(cf_1.imag,cf_2.imag));
+    else
+        error("CFixpoint args don't share the same scheme.");
+    end
+end
 #######################################################################################
 # Logical operator functions
 #######################################################################################
@@ -657,7 +694,7 @@ Apply 'steps' (>=0) right shifts to fxpt. Cannot use >> operator here since we m
 
 See also: [`>>`](@ref)
 """
-function >>(fxpt :: Fixpoint, steps :: Integer) :: Fixpoint
+function >>(fxpt :: Fixpoint{N}, steps :: Integer) :: Fixpoint{N} where {N}
     if (steps < 0)
         error("Integer value for steps must be greater than or equal to zero.");
     else
@@ -670,7 +707,7 @@ function >>(fxpt :: Fixpoint, steps :: Integer) :: Fixpoint
         else
             error("No recognisable rounding method specified");
         end
-        return Fixpoint(round.(Integer, fxpt.data/(2^steps),rnd_behav),fxpt.scheme);
+        return Fixpoint{N}(round.(Integer, fxpt.data/(2^steps),rnd_behav),fxpt.scheme);
     end
 end
 
@@ -683,10 +720,10 @@ Apply 'steps' (>=0) right shifts to cfxpt. Cannot use >> operator here since we 
 
 See also: [`>>`](@ref)
 """
-function >>(cfxpt :: CFixpoint, steps :: Integer) :: CFixpoint
+function >>(cfxpt :: CFixpoint{N}, steps :: Integer) :: CFixpoint{N} where {N}
     t_real = cfxpt.real >> steps;
     t_imag = cfxpt.imag >> steps;
-    return CFixpoint(t_real, t_imag);
+    return CFixpoint{N}(t_real, t_imag);
 end
 
 """
@@ -697,7 +734,7 @@ Overload << function for Fixpoint args.
 Apply 'steps' (>=0) left shifts to fxpt.
 See also: [`<<`](@ref)
 """
-function <<(fxpt :: Fixpoint, steps :: Integer) :: Fixpoint
+function <<(fxpt :: Fixpoint{N}, steps :: Integer) :: Fixpoint{N} where {N}
     t_fxpt = copy(fxpt);
     if (steps < 0)
         error("Integer value for steps must be greater than or equal to zero.");
@@ -715,8 +752,8 @@ Overload << function for Fixpoint args.
 Apply 'steps' (>=0) left shifts to fxpt.
 See also: [`<<`](@ref)
 """
-function <<(cfxpt :: CFixpoint, steps :: Integer) :: CFixpoint
+function <<(cfxpt :: CFixpoint{N}, steps :: Integer) :: CFixpoint{N} where {N}
     t_real = cfxpt.real << steps;
     t_imag = cfxpt.imag << steps;
-    return CFixpoint(t_real,t_imag);
+    return CFixpoint{N}(t_real,t_imag);
 end
