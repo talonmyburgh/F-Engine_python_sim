@@ -1,5 +1,5 @@
 import Base: sum, +, -, *, <<, >>, typemin, typemax, show, copy, getindex, setindex!,
-        size, zeros
+        size, zeros, hcat, axes
 using Printf
 
 #########################################################################################
@@ -54,11 +54,6 @@ struct FixpointScheme
 end
 
 """
-```
-struct Fixpoint
-    data :: Array{Integer}
-    scheme :: FixpointScheme
-```
 Fixpoint type that accepts an integer array or single integer accompanied by a FixpointScheme that
 governs it's handling.
 
@@ -71,12 +66,9 @@ struct Fixpoint
     Fixpoint(fx_data::Integer,scheme::FixpointScheme) = new([fx_data],scheme);
 end
 
+Base.IndexStyle(::Type{<:Fixpoint}) = IndexLinear()
+
 """
-```
-struct CFixpoint
-    real :: Fixpoint
-    imag :: Fixpoint
-```
 CFixpoint is the complex extension of Fixpoint that holds two Fixpoint types (real and imag) as its 
 Real and Imaginary parts.
 
@@ -97,6 +89,7 @@ struct CFixpoint
     end
 end
 
+Base.IndexStyle(::Type{<:CFixpoint}) = IndexLinear()
 #########################################################################################
 # Float parsing funtions
 #########################################################################################
@@ -155,9 +148,6 @@ function toFloat(f :: Fixpoint) :: Array{Float64}
 end
 
 """
-```
-fromComplex(c_data::Array{<:Complex}, scheme::FixpointScheme)
-```
 Converts a Complex value to CFixpoint according to the FixpointScheme presented.
 
 See also: [`toComplex`](@ref)
@@ -167,9 +157,6 @@ function fromComplex(c_data::Union{Array{<:Complex},Complex}, scheme::FixpointSc
 end
 
 """
-```
-fromComplex(r_data::Union{Array{<:Real},Real}, i_data::Union{Array{<:Real},Real}, scheme::FixpointScheme)
-```
 Converts a two floating point values to CFixpoint according to the FixpointScheme presented.
 
 See also: [`toComplex`](@ref)
@@ -177,6 +164,16 @@ See also: [`toComplex`](@ref)
 function fromComplex(r_data::Union{Array{<:Real},Real}, i_data::Union{Array{<:Real},Real}, scheme::FixpointScheme) :: CFixpoint
     return CFixpoint(fromFloat(r_data,scheme),fromFloat(i_data,scheme));
 end
+
+"""
+Converts a single floating point values to CFixpoint according to the FixpointScheme presented.
+
+See also: [`toComplex`](@ref)
+"""
+function fromComplex(r_data::Union{Array{<:Real},Real}, scheme::FixpointScheme) :: CFixpoint
+    return CFixpoint(fromFloat(r_data,scheme),fromFloat(zeros(size(r_data)),scheme));
+end
+
 
 """
 Converts a CFixpoint array to a complex point array according to the CFixpoint's FixpointScheme.
@@ -546,8 +543,8 @@ getindex(f :: Fixpoint, i :: UnitRange{Int64})
 ```
 Overload getindex function for accessing data elements out Fixpoint type.
 """
-function getindex(f :: Fixpoint, i :: UnitRange{Int64}) :: Fixpoint
-    return Fixpoint(f.data[i],f.scheme);
+function getindex(f :: Fixpoint, i :: Vararg{UnitRange{Int64},N}) :: Fixpoint where {N}
+    return Fixpoint(f.data[i...],f.scheme);
 end
 
 """
@@ -556,8 +553,8 @@ getindex(cf :: CFixpoint, i :: UnitRange{Int64})
 ```
 Overload getindex function for accessing data elements out CFixpoint type.
 """
-function getindex(cf :: CFixpoint, i :: UnitRange{Int64}) :: CFixpoint
-    return CFixpoint(cf.real[i],cf.imag[i]);
+function getindex(cf :: CFixpoint, i :: Vararg{UnitRange{Int64},N}) :: CFixpoint where {N}
+    return CFixpoint(cf.real[i...],cf.imag[i...]);
 end
 
 """
@@ -643,6 +640,46 @@ Overload setindex! function for accessing data elements out CFixpoint type.
 function setindex!(cf :: CFixpoint, val :: CFixpoint, i :: Int) :: CFixpoint
     cf.real[i] = val.real;
     cf.imag[i] = val.imag;
+end
+
+"""
+Overload axes function to handle Fixpoint types.
+"""
+function axes(f :: Fixpoint, i :: Int64) :: AbstractUnitRange
+    return axes(f.data,i);
+end
+
+"""
+Overload axes function to handle CFixpoint types.
+"""
+function axes(cf :: CFixpoint, i :: Int64) :: AbstractUnitRange
+    return axes(cf.real.data,i);
+end
+
+"""
+Overload hcat function to handle horizontal concatenation of Fixpoint types.
+Requires that schemes match.
+"""
+function hcat(f_1 :: Fixpoint, f_2 :: Fixpoint) :: Fixpoint 
+    #Check schemes match:
+    if f_1.scheme == f_2.scheme
+        return Fixpoint(hcat(f_1.data,f_2.data),f_1.scheme);
+    else
+        error("Fixpoint args don't share the same scheme.");
+    end
+end
+
+"""
+Overload hcat function to handle horizontal concatenation of CFixpoint types.
+Requires that schemes match.
+"""
+function hcat(cf_1 :: CFixpoint, cf_2 :: CFixpoint) :: CFixpoint 
+    #Check real schemes match - imag will match:
+    if cf_1.real.scheme == cf_2.real.scheme
+        return CFixpoint(hcat(cf_1.real,cf_2.real), hcat(cf_1.imag,cf_2.imag));
+    else
+        error("CFixpoint args don't share the same scheme.");
+    end
 end
 
 #######################################################################################

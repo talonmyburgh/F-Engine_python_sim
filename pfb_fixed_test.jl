@@ -32,30 +32,35 @@ pfbsch = FixPFBScheme(N,taps,data_sch,data_sch,coeff_sch,data_sch,data_sch,swreg
 data_fl = 0.5.*cos.(6*(2*pi/N) .*k);
 # data_fl = zeros(N,1);
 # data_fl[61:79] .= 0.1;
-data_fl = data_fl .+ 1im .* zeros(N,1);
+# data_fl = data_fl .+ 1im .* zeros(N,1);
 data_fx = fromComplex(data_fl,data_sch);
-ourfft = fixNatInIterDitFFT(pfbsch, data_fx);  
-idealfft = fft(data_fl);
-fltfft = natInIterDitFFT(fltpfbsch,data_fl);
-ourfft_flt = toComplex(ourfft);
+# ourfft = fixNatInIterDitFFT(pfbsch, data_fx);  
+# idealfft = fft(data_fl);
+# fltfft = natInIterDitFFT(fltpfbsch,data_fl);
+# ourfft_flt = toComplex(ourfft);
 
-@test any(abs.(fltfft./swreg .- ourfft_flt) .< 0.0001);
- 
-# # # Test Separation
-# # data = zeros(ComplexF64,N);
-# # data[15] = 1.0 + 0.0*im;
-# # idealfft = fft(data);
-# # (G_k,H_k) = SpecSplit(idealfft);
-# # g_k = fft(real(data));
-# # h_k = fft(imag(data));
-# # @test all(abs.(g_k .- G_k).<1e-6);
-# # @test all(abs.(h_k .- H_k).<1e-6);
+# @test any(abs.(fltfft./swreg .- ourfft_flt) .< 0.0001);
 
-# # # Test Power
-# # # single fft output
-# # pow_ourfft = SpecPow(pfbsch, ourfft);
-# # ideal_pow_fft = (abs.(ourfft)).^2;
-# # @test all((pow_ourfft .- ideal_pow_fft).<1e-6);
+# Test PFB FIR
+firout = FixPFBFir(pfbsch,data_fx)
+
+
+
+# # Test Separation
+# data = zeros(ComplexF64,N);
+# data[15] = 1.0 + 0.0*im;
+# idealfft = fft(data);
+# (G_k,H_k) = SpecSplit(idealfft);
+# g_k = fft(real(data));
+# h_k = fft(imag(data));
+# @test all(abs.(g_k .- G_k).<1e-6);
+# @test all(abs.(h_k .- H_k).<1e-6);
+
+# # Test Power
+# # single fft output
+# pow_ourfft = SpecPow(pfbsch, ourfft);
+# ideal_pow_fft = (abs.(ourfft)).^2;
+# @test all((pow_ourfft .- ideal_pow_fft).<1e-6);
 
 # # # #Test PFB
 # # n=N*taps*10;

@@ -134,4 +134,13 @@ function fixNatInIterDitFFT(fixpfbsch::FixPFBScheme, c_data::CFixpoint) :: CFixp
     end
 end
 
-
+"""
+FIR: Takes data segment (N long) and appends each value to each fir.
+Returns data segment (N long) that is the sum of fircontents*windowcoeffs.
+Operates on CFixpoint types
+"""
+function FixPFBFir(pfbsch::FixPFBScheme,x::CFixpoint) :: CFixpoint
+    pfbsch.reg = hcat(x,pfbsch.reg)[1:end,1:end-1];
+    X = sum(pfbsch.reg * pfbsch.window, dims=2);
+    return X;
+end
