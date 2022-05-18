@@ -33,26 +33,26 @@ def bitrevfixarray(array,N):                                                   #
 # FFT: natural data order in, bit reversed twiddle factors, bit reversed 
 # order out.
 # =============================================================================
-def make_fix_twiddle(N,bits,fraction,method="ROUND"):
-    twids = cfixpoint(bits,fraction, method = method)
+def make_fix_twiddle(N,bits,fraction,underflow_method="ROUND",overflow_method="WRAP"):
+    twids = cfixpoint(bits,fraction, underflow_method = underflow_method,overflow_method=overflow_method)
     twids.from_complex(np.exp(-2*np.arange(N//2)*np.pi*1j/N))
     return twids
 
 """Natural order in DIT FFT that accepts the data, the twiddle factors
 (must be bit reversed), a shift register, the bitwidth and fraction
 bit width to process at, the twiddle factor bits and allows for staging"""
-def iterffft_natural_DIT(DATA,twid,swreg,bits,fraction,twidfrac,staged=False):
+def iterffft_natural_DIT(DATA,twid,shiftreg,bits,fraction,twidfrac,staged=False):
 
     data=DATA.copy()
     N = data.data.shape[0]                                                     #how long is data stream
     
-    if(type(swreg)==int):                                           #if integer is parsed rather than list
-        shiftreg = [int(x) for x in bin(swreg)[2:]]
+    if(type(shiftreg)==int):                                           #if integer is parsed rather than list
+        shiftreg = [int(x) for x in bin(shiftreg)[2:]]
         if (len(shiftreg)<int(np.log2(N))):
             for i in range(int(np.log2(N))-len(shiftreg)):
                 shiftreg.insert(0,0)
-    elif(type(swreg)==list and type(swreg[0])==int):             #if list of integers is parsed
-        shiftreg = swreg
+    elif(type(shiftreg)==list and type(shiftreg[0])==int):             #if list of integers is parsed
+        shiftreg = shiftreg
     else:
         raise ValueError('Shiftregister must be type int or binary list of ints')
     
@@ -112,11 +112,12 @@ class FixPFB(object):
         running dual polarisations, what rounding and overflow scheme to use,
         fwidth and whether to stage."""
         def __init__(self, N, taps, bits_in, frac_in, bits_fft, frac_fft, 
-                     bits_out, frac_out, twidbits, twidfrac, swreg, 
+                     bits_out, frac_out, twidbits, twidfrac, shiftreg, 
                      bitsofacc=32, fracofacc=31, unsigned = False, 
                      chan_acc =False, datasrc = None, w = 'hann',
-                     firmethod="ROUND", fftmethod="ROUND", dual = False,
-                     fwidth=1, staged = False):
+                     fir_underflow_method="ROUND", fft_underflow_method="ROUND",
+                     fir_overflow_method="SATURATE", fft_overflow_method="WRAP",
+                     dual = False, fwidth=1, staged = False):
             
             """Populate PFB object properties"""
             self.N = N                                                         #how many points
@@ -132,13 +133,13 @@ class FixPFB(object):
             self.bits_out = bits_out                                           #what bitlength out you want
             self.frac_out = frac_out
             self.fwidth = fwidth                                               #normalising factor for fir window
-            if(type(swreg)==int):                                           #if integer is parsed rather than list
-                self.shiftreg = [int(x) for x in bin(swreg)[2:]]
+            if(type(shiftreg)==int):                                           #if integer is parsed rather than list
+                self.shiftreg = [int(x) for x in bin(shiftreg)[2:]]
                 if (len(self.shiftreg)<int(np.log2(N))):
                     for i in range(int(np.log2(N))-len(self.shiftreg)):
                         self.shiftreg.insert(0,0)
-            elif(type(swreg)==list and type(swreg[0])==int):             #if list of integers is parsed
-                self.shiftreg = swreg
+            elif(type(shiftreg)==list and type(shiftreg[0])==int):             #if list of integers is parsed
+                self.shiftreg = shiftreg
             else:
                 raise ValueError('Shiftregister must be type int or binary list of ints')
                 
@@ -146,18 +147,20 @@ class FixPFB(object):
             self.staged = staged                                               #whether to record fft stages
             self.twidbits = twidbits                                           #how many bits to give twiddle factors
             self.twidfrac = twidfrac
-            self.firmethod=firmethod                                           #rounding scheme in firs
-            self.fftmethod=fftmethod                                           #rounding scheme in fft
+            self.fir_underflow_method=fir_underflow_method                                           #rounding scheme in firs
+            self.fir_overflow_method=fir_overflow_method                                           #rounding scheme in firs
+            self.fft_underflow_method=fft_underflow_method                                           #rounding scheme in fft
+            self.fft_overflow_method=fft_overflow_method                                           #rounding scheme in fft
             
             #Define variables to be used:
             self.reg_real = fixpoint(self.bits_in, self.frac_in,unsigned = self.unsigned,
-                                     method = self.firmethod)
+                                     underflow_method= self.fir_underflow_method,overflow_method= self.fir_overflow_method)
             self.reg_real.from_float(np.zeros([N,taps],dtype = np.int64))      #our fir register size filled with zeros orignally
             self.reg_imag = self.reg_real.copy()
 
             if(datasrc is not None and type(datasrc)==str):                    #if input data file is specified
                 self.inputdata = cfixpoint(self.bits_in, self.frac_in,unsigned = self.unsigned,
-                           method = self.firmethod)
+                           underflow_method= self.fir_underflow_method, overflow_method= self.fir_overflow_method)
                 self.inputdatadir = datasrc
                 self.outputdatadir = datasrc[:-4]+"out.npy"
                 self.inputdata.from_complex(np.load(datasrc, mmap_mode = 'r'))
@@ -166,13 +169,13 @@ class FixPFB(object):
             
             #the window coefficients for the fir filter
             self.window = fixpoint(self.bits_fft, self.frac_fft,unsigned = self.unsigned,
-                                   method = self.firmethod)
+                                  underflow_method= self.fir_underflow_method,overflow_method= self.fir_overflow_method)
             tmpcoeff,self.firsc = coeff_gen(self.N,self.taps,w,self.fwidth)
             self.window.from_float(tmpcoeff)  
             
             #the twiddle factors for the natural input fft
             self.twids = make_fix_twiddle(self.N,self.twidbits,twidfrac,
-                                          method=self.fftmethod)
+                                          underflow_method= self.fft_underflow_method,overflow_method= self.fft_overflow_method)
             self.twids = bitrevfixarray(self.twids,self.twids.data.size)
             
         """Takes data segment (N long) and appends each value to each fir.
@@ -192,8 +195,8 @@ class FixPFB(object):
             X.bits = self.bits_fft                                             #normalise to correct bit and frac length
             X.fraction = self.frac_fft
             X.normalise()
-            X.method = self.fftmethod                                          #adjust so that it now uses FFT rounding scheme
-            
+            X.underflow_method = self.fft_underflow_method                                          #adjust so that it now uses FFT rounding scheme
+            X.overflow_method = self.fft_overflow_method                                          #adjust so that it now uses FFT rounding scheme
             return X                                                           #FIR output
         
         """In the event that that dual polarisations have been selected, we need to 
@@ -254,7 +257,7 @@ class FixPFB(object):
             data_iter = size//self.N                                              #how many cycles of commutator
             
             X = cfixpoint(self.bits_fft, self.frac_fft,unsigned = self.unsigned,
-                          method = self.fftmethod)
+                          overflow_method= self.fft_overflow_method,underflow_method=self.fft_underflow_method)
             
             if(self.staged):                                                   #if all stages need be stored
                 X.from_complex(np.empty((self.N,data_iter,int(np.log2(self.N))+2),
@@ -292,7 +295,7 @@ class FixPFB(object):
                 X.bits=self.bits_out
                 X.fraction = self.frac_out
                 X.normalise()
-#            
+         
             """Decide on how to manipulate and display output data"""
             if(self.dual and not self.staged):                                 #If dual processing but not staged                      
                 self._split(X)

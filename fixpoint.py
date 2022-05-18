@@ -18,8 +18,9 @@ class fixpoint(object):
     maximum number representable, unsigned or signed integer, rounding method
     and overflow method"""
     def __init__(self,bits,fraction, min_int=None, max_int=None,
-                 unsigned=False, method = "ROUND"):
-        self.method = method
+                 unsigned=False, underflow_method = "ROUND", overflow_method = "WRAP"):
+        self.underflow_method = underflow_method
+        self.overflow_method = overflow_method
         self.range = 2 ** bits                                                 #The dynamic range of the number
         self.scale = 2 ** fraction                                             #The fractional dynamic range by which the number will be scaled
         self.unsigned = unsigned
@@ -85,7 +86,7 @@ class fixpoint(object):
                
     def __getitem__(self,key):                                                 #method of slicing fixpoint arrays
         newfpt = fixpoint(self.bits,self.fraction,unsigned=self.unsigned,
-                          method = self.method)
+                          underflow_method = self.underflow_method)
         newfpt.data = self.data.copy()[key]
         return newfpt
     
@@ -95,18 +96,33 @@ class fixpoint(object):
     def normalise(self):                                                       #how to fit all data values within the min/max specified
         self.data = np.clip(self.data, self.min, self.max)
 
-    def from_float(self, x):                                                   #take in float values                                       #detect overflow method used
-        if(self.method =="ROUND"):                                             #if we're rounding off decimal values bankers style
-            self.data = np.clip(np.round(x*self.scale).astype(self.FPTYPE),
-                            self.min, self.max)
-        elif(self.method =="TRUNCATE"):                                        #if we're truncating off decimal
-            self.data = np.clip(np.trunc(x*self.scale).astype(self.FPTYPE),
-                            self.min, self.max)
-        elif(self.method == "ROUND_INFTY"):                                    #round to decimal as round up - much slower but only option now.
-            self.data = np.clip(self.__roundinfty__(x*self.scale).astype(self.FPTYPE),
-                               self.min,self.max)
+    def from_float(self, x):                                                   #take in float values                                      
+        if self.overflow_method == "SATURATE":
+            if(self.underflow_method =="ROUND"):                                             #if we're rounding off decimal values bankers style
+                self.data = np.clip(np.round(x*self.scale).astype(self.FPTYPE),
+                                self.min, self.max)
+            elif(self.underflow_method =="TRUNCATE"):                                        #if we're truncating off decimal
+                self.data = np.clip(np.trunc(x*self.scale).astype(self.FPTYPE),
+                                self.min, self.max)
+            elif(self.underflow_method == "ROUND_INFTY"):                                    #round to decimal as round up - much slower but only option now.
+                self.data = np.clip(roundinfty(x*self.scale).astype(self.FPTYPE),
+                                self.min,self.max)
+            else:
+                raise ValueError("No recognisable underflow method specified")
+        elif self.overflow_method == "WRAP":
+            if(self.underflow_method =="ROUND"):                                             #if we're rounding off decimal values bankers style
+                self.data = clip_wrap(np.round(x*self.scale).astype(self.FPTYPE),
+                                self.min, self.max+1)
+            elif(self.underflow_method =="TRUNCATE"):                                        #if we're truncating off decimal
+                self.data = clip_wrap(np.trunc(x*self.scale).astype(self.FPTYPE),
+                                self.min, self.max+1)
+            elif(self.underflow_method == "ROUND_INFTY"):                                    #round to decimal as round up - much slower but only option now.
+                self.data = clip_wrap(roundinfty(x*self.scale).astype(self.FPTYPE),
+                                self.min,self.max+1)
+            else:
+                raise ValueError("No recognisable underflow method specified")
         else:
-            raise ValueError("No recognisable quantisation method specified")
+            raise ValueError("No recognisable overflow method specified")
         
     def to_float(self): #for plotting etc
         return (self.data.astype(self.FPTYPE)) / self.scale
@@ -115,7 +131,7 @@ class fixpoint(object):
         res = self.data.sum(*args, **kwargs)                                   #use numpy sum method
         bits = self.bits + int(np.ceil(np.log2(self.data.size / res.size)))
         result = fixpoint(bits, self.fraction, unsigned=self.unsigned,
-                          method = self.method)
+                          underflow_method = self.underflow_method)
         result.data = res
         result.normalise()                                                     #clip and stuff
         return result
@@ -125,7 +141,7 @@ class fixpoint(object):
         result = fixpoint(self.bits + w.bits,
                                  self.fraction + w.fraction,
                                  unsigned=self.unsigned and w.unsigned,
-                                 method = self.method)
+                                 underflow_method = self.underflow_method)
         result.data = res
         result.normalise()
         return result
@@ -139,7 +155,7 @@ class fixpoint(object):
         result = fixpoint(max(self.bits, y.bits) + 1,
                                  max(self.fraction, y.fraction),
                                  unsigned=self.unsigned and y.unsigned,
-                                 method = self.method) 
+                                 underflow_method = self.underflow_method) 
         result.data = res
         result.normalise()
         return result
@@ -153,24 +169,24 @@ class fixpoint(object):
         result = fixpoint(max(self.bits, y.bits) + 1,
                                  max(self.fraction, y.fraction),
                                  unsigned=self.unsigned and y.unsigned,
-                                 method = self.method)
+                                 underflow_method = self.underflow_method)
         result.data = res
         result.normalise()
         return result
     
     def quantise(self, bits, fraction, min_int=None, max_int=None, unsigned=False,
-                 method="ROUND"):
+                 underflow_method="ROUND",overflow_method="WRAP"):
         result = fixpoint(bits, fraction, min_int, max_int, unsigned,
-                          method = method)
+                          underflow_method = underflow_method,overflow_method=overflow_method)
         result.from_float(self.to_float())
         return result
     
     def __rshift__(self,steps):                                                #slicing and right shifting technique - allows for rounding
-        if(self.method == "ROUND"):
+        if(self.underflow_method == "ROUND"):
             self.data = np.round(self.data/(2**steps)).astype(self.FPTYPE)
-        elif(self.method =="ROUND_INFTY"):
-            self.data = self.__roundinfty__(self.data/(2**steps)).astype(self.FPTYPE)
-        elif(self.method=="TRUNCATE"):    
+        elif(self.underflow_method =="ROUND_INFTY"):
+            self.data = roundinfty(self.data/(2**steps)).astype(self.FPTYPE)
+        elif(self.underflow_method=="TRUNCATE"):    
             self.data >>= steps
         else:
             raise ValueError("No recognisable quantisation method specified")
@@ -182,43 +198,14 @@ class fixpoint(object):
     
     def copy(self):                                                            #method for making a copy of fixpoint type (else get referencing issues)
         tmpfxpt=fixpoint(self.bits,self.fraction,unsigned=self.unsigned,
-                         method = self.method,
+                         underflow_method = self.underflow_method,
+                         overflow_method=self.overflow_method,
                          min_int = self.min, max_int = self.max)
         tmpfxpt.data = self.data.copy()
         return tmpfxpt
     
     def power(self):
         return self.data*self.data
-    
-    """This method rounds values in an array to +/- infinity"""
-    @nb.jit
-    def __roundinfty__(self,array):
-        a = array.copy()
-        f=np.modf(a)[0]                                                        #get decimal values from data
-        if (a.ndim == 1):                                                      #for 1D array
-            for i in range(len(array)):
-                if((f[i]<0.0 and f[i] <=-0.5) or (f[i]>=0.0 and f[i]<0.5)):
-                    a[i]=np.floor(a[i])
-                else:
-                    a[i]=np.ceil(a[i])
-        elif(a.ndim==2):                                                       #for 2D array
-            for i in range(array.shape[0]):
-                for j in range(array.shape[1]):
-                    if((f[i,j]<0.0 and f[i,j] <=-0.5) or (f[i,j]>=0.0
-                       and f[i,j]<0.5)):
-                        a[i,j]=np.floor(a[i,j])
-                    else:
-                        a[i,j]=np.ceil(a[i,j])
-        elif(a.ndim==3):                                                       #for 3D array
-            for i in range(array.shape[0]):
-                for j in range(array.shape[1]):
-                    for k in range(array.shape[2]):
-                        if((f[i,j,k]<0.0 and f[i,j,k] <=-0.5) or 
-                           (f[i,j,k]>=0.0 and f[i,j,k]<0.5)):
-                            a[i,j,k]=np.floor(a[i,j,k])
-                        else:
-                            a[i,j,k]=np.ceil(a[i,j,k])
-        return a
 
     __str__ = __repr__                                                         #redundancy for print
     
@@ -228,13 +215,13 @@ class fixpoint(object):
 class cfixpoint(object):
 
     def __init__(self, bits=None, fraction=None, min_int=None, max_int=None,
-                 unsigned=False, method = "ROUND", real=None, imag=None):
+                 unsigned=False, underflow_method = "ROUND", overflow_method = "WRAP", real=None, imag=None):
 
         if bits is not None:                                                   #if bits are supplied (i.e not real and imag)
             self.real = fixpoint(bits, fraction, min_int, max_int, unsigned,   #declare a real and imag fixpoint
-                                 method)
+                                 underflow_method,overflow_method)
             self.imag = fixpoint(bits, fraction, min_int, max_int, unsigned,
-                                 method)
+                                 underflow_method,overflow_method)
         elif real is not None:                                                 #else use real and imag fixpoint supplied
             self.real = real
             self.imag = imag
@@ -289,13 +276,22 @@ class cfixpoint(object):
         return self.real.data + 1j * self.imag.data  
     
     @property
-    def method(self):                                                          #rounding method in use
-        return self.real.method
+    def underflow_method(self):                                                          #rounding underflow_method in use
+        return self.real.underflow_method
     
-    @method.setter
-    def method(self,val):
-        self.real.method=val
-        self.imag.method=val
+    @underflow_method.setter
+    def underflow_method(self,val):
+        self.real.underflow_method=val
+        self.imag.underflow_method=val
+
+    @property
+    def overflow_method(self):                                                          #overflow_method in use
+        return self.real.overflow_method
+    
+    @overflow_method.setter
+    def overflow_method(self,val):
+        self.real.overflow_method=val
+        self.imag.overflow_method=val
     
     def __repr__(self):                                                        #printing 
         return 'FP complex %s (%d, %d), shape %s' % \
@@ -351,11 +347,11 @@ class cfixpoint(object):
 
     #quantise the data to bounds required.
     def quantise(self, bits, fraction, min_int=None, max_int=None,
-                 unsigned=False, method="ROUND"):
+                 unsigned=False, underflow_method="ROUND", overflow_method="WRAP"):
         out_real = self.real.quantise(bits, fraction, min_int, max_int,
-                                      unsigned, method)
+                                      unsigned, underflow_method, overflow_method)
         out_imag = self.imag.quantise(bits, fraction, min_int, max_int,
-                                      unsigned, method)
+                                      unsigned, underflow_method, overflow_method)
         result = cfixpoint(real=out_real, imag=out_imag)
         return result
     
@@ -384,4 +380,40 @@ class cfixpoint(object):
         return res.real
         
     __str__ = __repr__
-    
+
+#Extra functions
+
+"""This underflow_method rounds values in an array to +/- infinity"""
+@nb.jit()
+def roundinfty(array):
+    a = array.copy()
+    f=np.modf(a)[0]                                                        #get decimal values from data
+    if (a.ndim == 1):                                                      #for 1D array
+        for i in range(len(array)):
+            if((f[i]<=0.0 and f[i] >-0.5) or (f[i]>=0.0 and f[i]<0.5)):
+                a[i]=np.floor(a[i])
+            else:
+                a[i]=np.ceil(a[i])
+    elif(a.ndim==2):                                                       #for 2D array
+        for i in range(array.shape[0]):
+            for j in range(array.shape[1]):
+                if((f[i,j]<=0.0 and f[i,j] >-0.5) or (f[i,j]>=0.0
+                    and f[i,j]<0.5)):
+                    a[i,j]=np.floor(a[i,j])
+                else:
+                    a[i,j]=np.ceil(a[i,j])
+    elif(a.ndim==3):                                                       #for 3D array
+        for i in range(array.shape[0]):
+            for j in range(array.shape[1]):
+                for k in range(array.shape[2]):
+                    if((f[i,j,k]<=0.0 and f[i,j,k] >-0.5) or 
+                        (f[i,j,k]>=0.0 and f[i,j,k]<0.5)):
+                        a[i,j,k]=np.floor(a[i,j,k])
+                    else:
+                        a[i,j,k]=np.ceil(a[i,j,k])
+    return a
+
+"""This saturation method wraps the values greater than max/min to min/max respectively"""
+def clip_wrap(array, min, max):
+    clamp_val = (array - min) % (max - min) + min
+    return clamp_val
